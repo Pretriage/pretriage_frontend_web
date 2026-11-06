@@ -4,19 +4,19 @@
 - Base URL: `http://localhost:8080`
 - Live OpenAPI: `http://localhost:8080/v3/api-docs`
 - Exported snapshot: `contracts/pretriage-openapi.json`
-- Snapshot date: 2026-10-22
-- Snapshot SHA-256: `7bb7f7e756988f12ce3bc0004995ea0602dc7c6f3dfc19a74ea5dab16e1bdd65`
+- Snapshot date: 2026-11-05
+- Snapshot SHA-256: `e64866621d72e08fd569dcb3c9f8b50a690edccaf1e421f5786c08d48c12e718`
 - OpenAPI version: 3.1.0
 - API title/version: Pretriage API / v1
-- Snapshot size: 83 paths and 78 schemas
+- Snapshot size: 86 paths and 79 schemas
 
-The snapshot and TypeScript types were refreshed from the running backend to
-include the hospital metrics endpoint (`metricas-hospital-controller`). It
-otherwise retains the previous content: password recovery, sector-scoped room
-management, and the hospital-wide specialty deactivation correction. The old
-optional estimated-time range is no longer exported; the reception adapter
-retains read compatibility with that earlier response while current responses
-use `fechaHoraAtencionEstimada`.
+The snapshot and TypeScript types were refreshed from the running backend. They
+include the consultation-scoped partial-pretriage conversation fields and chat
+classification retry endpoint, sector-session administration endpoints, and
+the hospital metrics distribution category for consultations without a valid
+completed AI classification. The old optional estimated-time range is no longer
+exported; the reception adapter retains read compatibility with that earlier
+response while current responses use `fechaHoraAtencionEstimada`.
 
 ## Metrics contract
 
@@ -80,7 +80,8 @@ generated contract, treated as absent = "-" in the UI):
 - `porcentajeAtendidos` (`double`).
 - `distribucionGravedadBot[]` and `distribucionGravedadMedico[]` of
   `DistribucionNivelItem { nivel: string, cantidad: int64, porcentaje: double }`.
-  The doctor distribution additionally reports `SIN_REVISION`.
+  The bot distribution includes `SIN_CLASIFICACION_IA` for queue entries without a
+  valid completed AI result; the doctor distribution additionally reports `SIN_REVISION`.
 - `pretriageRealizado`, `pretriageNoRealizado` (`int64`) and
   `porcentajePretriageRealizado` (`double`).
 - `serieDiaria[]` of `SerieDiariaItem { fecha: date, ingresados: int64,
@@ -263,6 +264,13 @@ GET  /api/medico/atenciones
 ```
 
 The API supports the complete planned medical-session flow. During `EN_ATENCION`, the frontend retrieves the normalized pretriage summary and requires the doctor to review priority before finalization. `CONFIRMAR` is one click. `CORREGIR` requires a different priority and accepts an optional reason of at most 500 characters. A genuine change is audited; an identical retry is idempotent. The review can be changed while attention remains open, and finalization is rejected with `409` while it is pending.
+
+The consultation-scoped pretriage response includes `estadoClasificacion`,
+`cierreParcial` and `mensajesConversacion`. For a `PARCIAL` closure without a
+valid AI result, the web shows the literal conversation in the same in-attention
+consultation view and marks the initial queue priority as provisional. The
+existing priority review flow remains available; the patient is not assigned a
+second consultation or queue entry.
 
 The doctor selects an assigned specialty, an active hospital sector and an active
 room in that sector before starting a session. Sector and room lists are filtered

@@ -183,7 +183,7 @@ function filasDistribucion(
 
 /** Distribución del bot: los cinco niveles en orden de gravedad, cero si faltan; sin inventar categorías. */
 export function distribucionBot(items: DistribucionNivelItem[] | undefined | null) {
-  return filasDistribucion(items, NIVELES_GRAVEDAD_BOT);
+  return filasDistribucion(items, [...NIVELES_GRAVEDAD_BOT, "SIN_CLASIFICACION_IA"]);
 }
 
 /** Distribución del médico: niveles en orden + SIN_REVISION siempre última; los desconocidos se omiten. */

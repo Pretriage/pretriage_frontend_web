@@ -352,6 +352,7 @@ export function DoctorWorkspace({
     const inAttention = current.estadoConsulta === "EN_ATENCION";
     const reviewPending = pretriage.data?.estadoRevision === "PENDIENTE";
     const summary = pretriage.data?.resumenClinico;
+    const partialWithoutAiSummary = Boolean(pretriage.data?.cierreParcial && !summary);
     return shell(
       <div className="page-stack narrow-stack">
         <header className="page-heading">
@@ -377,7 +378,11 @@ export function DoctorWorkspace({
                       <span className="eyebrow">Preclasificación</span>
                       <h2 id="priority-review-title">Resumen para la atención</h2>
                     </div>
-                    <span className="priority-badge">{priorityLabel(pretriage.data.prioridadPreliminar)}</span>
+                    {pretriage.data.cierreParcial ? (
+                      <span className="status-chip">Entrevista parcial</span>
+                    ) : (
+                      <span className="priority-badge">{priorityLabel(pretriage.data.prioridadPreliminar)}</span>
+                    )}
                   </div>
                   {summary ? (
                     <dl className="clinical-summary">
@@ -388,6 +393,25 @@ export function DoctorWorkspace({
                       {summary.signosAlarma?.length ? <div><dt>Signos de alarma</dt><dd>{listText(summary.signosAlarma)}</dd></div> : null}
                       {summary.observaciones ? <div><dt>Observaciones</dt><dd>{summary.observaciones}</dd></div> : null}
                     </dl>
+                  ) : pretriage.data.cierreParcial ? (
+                    <>
+                      <div className="notice notice-warning">
+                        La entrevista terminó antes de completar la clasificación automática. La prioridad operativa inicial de la cola es provisional: {priorityLabel(pretriage.data.prioridadPreliminar)}.
+                      </div>
+                      {pretriage.data.mensajesConversacion?.length ? (
+                        <div className="clinical-summary">
+                          <strong>Conversación para contexto</strong>
+                          <ol>
+                            {pretriage.data.mensajesConversacion.map((mensaje, index) => (
+                              <li key={`${mensaje.fechaHoraEnvio ?? "mensaje"}-${index}`}>
+                                <strong>{mensaje.autor === "PACIENTE" ? "Paciente" : "Asistente"}:</strong>{" "}
+                                {mensaje.contenido}
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      ) : null}
+                    </>
                   ) : (
                     <div className="notice notice-warning">No hay un resumen clínico estructurado disponible para esta consulta.</div>
                   )}
@@ -395,7 +419,11 @@ export function DoctorWorkspace({
                   {!reviewPending && !editingPriority ? (
                     <div className="priority-reviewed">
                       <div>
-                        <strong>{pretriage.data.estadoRevision === "CONFIRMADA" ? "Prioridad confirmada" : "Prioridad corregida"}</strong>
+                        <strong>{partialWithoutAiSummary
+                          ? pretriage.data.estadoRevision === "CONFIRMADA"
+                            ? "Prioridad clínica confirmada por el médico"
+                            : "Prioridad clínica ajustada por el médico"
+                          : pretriage.data.estadoRevision === "CONFIRMADA" ? "Prioridad confirmada" : "Prioridad corregida"}</strong>
                         <span>{priorityLabel(pretriage.data.prioridadEfectiva)}</span>
                       </div>
                       <button className="button button-secondary" onClick={() => setEditingPriority(true)}>Cambiar</button>
@@ -403,7 +431,7 @@ export function DoctorWorkspace({
                   ) : editingPriority ? (
                     <div className="priority-correction">
                       <label className="field">
-                        <span>Nueva prioridad</span>
+                        <span>{partialWithoutAiSummary ? "Prioridad clínica que vas a asignar" : "Nueva prioridad"}</span>
                         <select value={correctedPriority} onChange={(event) => setCorrectedPriority(event.target.value)}>
                           <option value="">Seleccionar</option>
                           {NIVELES_GRAVEDAD_BOT.map((priority) => (
@@ -420,17 +448,19 @@ export function DoctorWorkspace({
                       <div className="priority-actions">
                         <button className="button button-secondary" disabled={priorityReview.isPending} onClick={() => setEditingPriority(false)}>Cancelar</button>
                         <button className="button button-primary" disabled={!correctedPriority || priorityReview.isPending} onClick={() => priorityReview.mutate({ decision: "CORREGIR", priority: correctedPriority, reason: priorityReason })}>
-                          {priorityReview.isPending ? "Guardando…" : "Guardar corrección"}
+                          {priorityReview.isPending ? "Guardando…" : partialWithoutAiSummary ? "Guardar prioridad clínica" : "Guardar corrección"}
                         </button>
                       </div>
                     </div>
                   ) : (
                     <div className="priority-decision">
-                      <p>Antes de finalizar, confirmá si la prioridad preliminar fue correcta.</p>
+                      <p>{partialWithoutAiSummary
+                        ? "La prioridad operativa inicial es provisional. Confirmá la prioridad clínica que usarás para esta atención o ajustala según tu evaluación."
+                        : "Antes de finalizar, confirmá si la prioridad preliminar fue correcta."}</p>
                       <div className="priority-actions">
-                        <button className="button button-secondary" disabled={priorityReview.isPending} onClick={() => setEditingPriority(true)}>Modificar prioridad</button>
+                        <button className="button button-secondary" disabled={priorityReview.isPending} onClick={() => setEditingPriority(true)}>{partialWithoutAiSummary ? "Ajustar prioridad clínica" : "Modificar prioridad"}</button>
                         <button className="button button-primary" disabled={priorityReview.isPending} onClick={() => priorityReview.mutate({ decision: "CONFIRMAR" })}>
-                          {priorityReview.isPending ? "Confirmando…" : "La prioridad es correcta"}
+                          {priorityReview.isPending ? "Confirmando…" : partialWithoutAiSummary ? "Confirmar prioridad clínica" : "La prioridad es correcta"}
                         </button>
                       </div>
                     </div>
