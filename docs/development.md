@@ -90,6 +90,10 @@ message. Metric levels come from the shared module `lib/severity.ts` (also
 used by reception and doctor workspaces). Distribution bars use the solid
 severity palette via `metrics-fill`; the priority chips in reception and doctor
 keep their soft backgrounds.
+The bot distribution has a separate `SIN_CLASIFICACION_IA` row for queue entries
+without a valid completed AI result, including partial interviews. The provisional
+queue priority is not presented as an AI severity result; operational totals and
+the doctor severity distribution continue to include every queue arrival.
 
 Distribuciones and Serie diaria each have an independent
 `Cambiar vista a vertical` / `Cambiar vista a horizontal` control. The initial

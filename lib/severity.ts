@@ -10,7 +10,8 @@ export type NivelGravedad =
   | "URGENTE"
   | "NORMAL"
   | "NO_URGENTE"
-  | "SIN_REVISION";
+  | "SIN_REVISION"
+  | "SIN_CLASIFICACION_IA";
 
 export const NIVEL_GRAVEDAD_LABELS: Record<NivelGravedad, string> = {
   RIESGO_VITAL_INMEDIATO: "Riesgo vital inmediato",
@@ -19,6 +20,7 @@ export const NIVEL_GRAVEDAD_LABELS: Record<NivelGravedad, string> = {
   NORMAL: "Normal",
   NO_URGENTE: "No urgente",
   SIN_REVISION: "Sin revisión",
+  SIN_CLASIFICACION_IA: "Sin clasificación de IA",
 };
 
 export const NIVEL_GRAVEDAD_CLASS: Record<NivelGravedad, string> = {
@@ -28,6 +30,7 @@ export const NIVEL_GRAVEDAD_CLASS: Record<NivelGravedad, string> = {
   NORMAL: "priority-normal",
   NO_URGENTE: "priority-low",
   SIN_REVISION: "priority-neutral",
+  SIN_CLASIFICACION_IA: "priority-neutral",
 };
 
 /** Orden canónico de gravedad para la distribución del bot (5 niveles). */
