@@ -201,10 +201,12 @@ GET  /api/recepcion/pacientes/{dni}?sesionId={sesionId}
 GET  /api/recepcion/admisiones?sesionId={sesionId}
 POST /api/recepcion/admisiones
 GET  /api/recepcion/admisiones/{admisionId}
+PUT  /api/recepcion/admisiones/{admisionId}/cobertura
 POST /api/recepcion/admisiones/{admisionId}/finalizar
 POST /api/recepcion/admisiones/{admisionId}/cancelar
 GET  /api/pacientes/{pacienteId}/obrasocial/credenciales
 POST /api/pacientes/{pacienteId}/obrasocial/credencial
+PUT  /api/pacientes/{pacienteId}/obrasocial/credenciales/{credencialId}
 ```
 
 Rules relevant to the frontend:
@@ -213,17 +215,25 @@ Rules relevant to the frontend:
 - Hospitals are limited to assignments for the authenticated receptionist.
 - DNI is normalized to digits and must contain seven or eight digits.
 - An existing patient is reused by DNI; otherwise the admission request creates a reception-origin patient.
-- Reception captures and persists the structured address: street, number, optional floor, locality or neighborhood (`ciudad`), and province. The address form displays «Barrio» for Ciudad Autónoma de Buenos Aires and «Localidad» for other provinces. Postal code is optional and is no longer requested by the reception form. Submitting an admission updates the address of an existing patient with the verified values while preserving an already stored postal code when none is submitted.
+- The form preloads stored demographics and address from lookup. It displays birth dates as
+  `DD/MM/YYYY` and sends ISO. The date must be before today and no more than 120 calendar years
+  in the past using Argentina's local date. An admission saves the verified values for existing
+  patients too. Contact email and postal code are optional and can be cleared explicitly.
+- The address form displays «Barrio» for Ciudad Autónoma de Buenos Aires and «Localidad» for
+  other provinces. Both use the API field `ciudad`.
 - A patient cannot have another active consultation.
-- Patient lookup returns `atencionEnCurso` and `estadoAtencionEnCurso`. Reception must show this before admission entry and disable creation while it is true; the create endpoint remains the authoritative concurrency guard.
-- Specialty must belong to the session hospital.
-- After admission creation, reception may list the patient's existing health
-  coverage credentials and add another one before completing triage. This step
-  is optional and uses the backend-provided `pacienteId`; coverage data is not
-  persisted in browser storage.
+- Patient lookup returns `atencionEnCurso` and `estadoAtencionEnCurso`. The web stays on the
+  DNI search when there is an active attention. If creation returns a conflict, the web
+  checks lookup again to surface the latest attention state.
+- Specialty starts blank for every admission and must belong to the session hospital.
+- After admission creation, reception can add or edit a credential and choose which one
+  applies. The web sends `{ credencialId }` to the admission coverage endpoint, using `null`
+  for no coverage. `coberturaConfirmada` and `cobertura` from the admission list distinguish
+  a pending choice from a confirmed choice on resume. Coverage data is not persisted in
+  browser storage.
 - A credential requires `nombreObraSocial`, a 6-20 digit `numeroAfiliado`, an
-  alphanumeric `plan`, and a `fechaVencimiento` in ISO date format. A patient
-  may have multiple credentials.
+  alphanumeric `plan`, and a `fechaVencimiento` in ISO date format. In reception, expiration
+  must be after today for creation, edits, and selection. The UI displays `DD/MM/YYYY`.
 - The receptionist completes one structured clinical form. `motivoConsulta` is
   the required patient-language main complaint; `sintomas` contains only
   optional additional symptoms. Pain is a repeatable `dolores` list with one

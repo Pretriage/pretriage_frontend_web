@@ -196,6 +196,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/recepcion/admisiones/{admisionId}/cobertura": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["seleccionarCobertura"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/recepcion/admisiones/{admisionId}/finalizar": {
         parameters: {
             query?: never;
@@ -1673,6 +1689,17 @@ export interface components {
             /** Format: date-time */
             fechaHoraCancelacion?: string;
             estimacion?: components["schemas"]["TiempoEstimadoAtencionResponse"];
+            coberturaConfirmada?: boolean;
+            cobertura?: components["schemas"]["CoberturaRecepcionDTO"] | null;
+        };
+        CoberturaRecepcionDTO: {
+            /** Format: int64 */
+            credencialId?: number | null;
+            nombreObraSocial?: string | null;
+        };
+        SeleccionCoberturaRecepcionRequest: {
+            /** Format: int64 */
+            credencialId?: number | null;
         };
         CrearInvitacionRequest: {
             /** Format: email */
@@ -2656,6 +2683,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["AdmisionRecepcionDTO"];
+                };
+            };
+        };
+    };
+    seleccionarCobertura: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                admisionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeleccionCoberturaRecepcionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CoberturaRecepcionDTO"];
                 };
             };
         };

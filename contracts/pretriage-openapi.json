@@ -661,6 +661,47 @@
         }
       }
     },
+    "/api/recepcion/admisiones/{admisionId}/cobertura": {
+      "put": {
+        "tags": [
+          "admision-recepcion-controller"
+        ],
+        "operationId": "seleccionarCobertura",
+        "parameters": [
+          {
+            "name": "admisionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeleccionCoberturaRecepcionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoberturaRecepcionDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/recepcion/admisiones/{admisionId}/finalizar": {
       "post": {
         "tags": [
@@ -4372,6 +4413,37 @@
           },
           "estimacion": {
             "$ref": "#/components/schemas/TiempoEstimadoAtencionResponse"
+          },
+          "coberturaConfirmada": {
+            "type": "boolean"
+          },
+          "cobertura": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/CoberturaRecepcionDTO" },
+              { "type": "null" }
+            ]
+          }
+        }
+      },
+      "CoberturaRecepcionDTO": {
+        "type": "object",
+        "properties": {
+          "credencialId": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "nombreObraSocial": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "SeleccionCoberturaRecepcionRequest": {
+        "type": "object",
+        "properties": {
+          "credencialId": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "exclusiveMinimum": 0
           }
         }
       },

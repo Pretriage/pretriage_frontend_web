@@ -1783,6 +1783,19 @@ span.required-mark {
   margin-bottom: 14px;
 }
 
+.coverage-options,
+.coverage-form-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.coverage-options {
+  display: grid;
+  gap: 14px;
+}
+
 .credential-list {
   display: grid;
   grid-auto-columns: minmax(280px, 390px);
@@ -1791,6 +1804,21 @@ span.required-mark {
   overflow-x: auto;
   padding: 2px 2px 10px;
   scroll-snap-type: x proximity;
+}
+
+.credential-option {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  scroll-snap-align: start;
+}
+
+.credential-option-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .coverage-layout {

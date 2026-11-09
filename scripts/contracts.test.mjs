@@ -4,8 +4,9 @@ import path from "node:path";
 import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
+import { z } from "zod";
 
-function loadTypeScript(relativePath, { fetch = globalThis.fetch, require = () => ({}) } = {}) {
+function loadTypeScript(relativePath, { fetch = globalThis.fetch, require = () => ({}), Date: DateImplementation = Date } = {}) {
   const filename = path.join(process.cwd(), relativePath);
   const source = fs.readFileSync(filename, "utf8");
   const output = ts.transpileModule(source, {
@@ -17,9 +18,50 @@ function loadTypeScript(relativePath, { fetch = globalThis.fetch, require = () =
     fileName: filename,
   }).outputText;
   const exports = {};
-  vm.runInNewContext(output, { exports, fetch, require, Request, Response }, { filename });
+  vm.runInNewContext(output, { exports, fetch, require, Request, Response, Date: DateImplementation }, { filename });
   return exports;
 }
+
+test("recepción convierte fechas argentinas a ISO sin aceptar días inexistentes", () => {
+  const { fechaLocalAIso, fechaIsoALocal, hoyIso } = loadTypeScript("features/reception/date-format.ts");
+
+  assert.equal(fechaIsoALocal("2024-02-29"), "29/02/2024");
+  assert.equal(fechaIsoALocal(null), "");
+  assert.equal(fechaLocalAIso("29/02/2024"), "2024-02-29");
+  assert.equal(fechaLocalAIso("29/02/2023"), null);
+  assert.equal(fechaLocalAIso("31/04/2024"), null);
+  assert.equal(fechaLocalAIso("2024-02-29"), null);
+  assert.equal(hoyIso(new Date("2026-11-09T02:30:00Z")), "2026-11-08");
+});
+
+test("recepción exige nacimiento anterior a hoy y admite hasta 120 años", () => {
+  class FixedDate extends Date {
+    constructor(...args) {
+      super(...(args.length ? args : ["2026-11-09T02:30:00Z"]));
+    }
+  }
+  const dateFormat = loadTypeScript("features/reception/date-format.ts", { Date: FixedDate });
+  const { patientSchema } = loadTypeScript("features/reception/schema.ts", {
+    require(specifier) {
+      if (specifier === "zod") return { z };
+      if (specifier === "./date-format") return dateFormat;
+      throw new Error(`Unexpected module: ${specifier}`);
+    },
+  });
+  const patient = {
+    dni: "12345678", nombre: "Paciente", apellido: "De prueba",
+    generoBiologico: "X", telefono: "1134567890", correoElectronico: "",
+    calle: "Calle", alturaDomicilio: "100", piso: "", ciudad: "Almagro",
+    provincia: "Ciudad Autónoma de Buenos Aires", codigoPostal: "", codigoEspecialidad: "CLINICA_MEDICA",
+  };
+
+  assert.equal(patientSchema.parse({ ...patient, fechaNacimiento: "08/11/1906" }).fechaNacimiento, "1906-11-08");
+  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "07/11/1906" }).success, false);
+  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "08/11/1826" }).success, false);
+  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "08/11/2026" }).success, false);
+  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "07/11/2026" }).success, true);
+  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "07/11/2026", generoBiologico: "" }).success, false);
+});
 
 test("apiClient acepta 204 vacío, JSON 200 y conserva el error 409", async () => {
   const emptyResponseClient = loadTypeScript("lib/api/client.ts", {
@@ -164,5 +206,40 @@ test("la ruta administrativa consulta sesiones del sector y finaliza conservando
     ["/api/admin/hospitales/12/configuracion/sectores/7/sesiones", "GET"],
     ["/api/admin/hospitales/12/configuracion/sectores/7/sesiones/23/cerrar", "POST"],
     ["/api/admin/hospitales/12/configuracion/sectores/7/sesiones/23/cerrar", "POST"],
+  ]);
+});
+
+test("recepción edita la credencial y guarda la selección de cobertura por admisión", async () => {
+  const calls = [];
+  const route = loadTypeScript("app/api/staff/reception/route.ts", {
+    require: (specifier) => {
+      if (specifier === "next/server") return { NextResponse: { json: Response.json } };
+      if (specifier === "@/lib/api/route") {
+        return { apiErrorResponse: (error) => Response.json({ message: error.message }, { status: 500 }) };
+      }
+      if (specifier === "@/lib/api/server") {
+        return { backendRequest: async (url, init) => {
+          calls.push([url, init.method, JSON.parse(init.body)]);
+          return {};
+        } };
+      }
+      throw new Error(`Unexpected module: ${specifier}`);
+    },
+  });
+  const post = (body) => route.POST(new Request("http://localhost/api/staff/reception", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }));
+  const credential = { nombreObraSocial: "OSDE", numeroAfiliado: "12345678", plan: "310", fechaVencimiento: "2040-02-01" };
+
+  assert.equal((await post({ operation: "updatePatientCredential", patientId: 2, credentialId: 9, credential })).status, 200);
+  assert.equal((await post({ operation: "selectCoverage", admissionId: 7, credentialId: 9 })).status, 200);
+  assert.equal((await post({ operation: "selectCoverage", admissionId: 7, credentialId: null })).status, 200);
+  assert.equal((await post({ operation: "selectCoverage", admissionId: 7 })).status, 400);
+  assert.deepEqual(calls, [
+    ["/api/pacientes/2/obrasocial/credenciales/9", "PUT", credential],
+    ["/api/recepcion/admisiones/7/cobertura", "PUT", { credencialId: 9 }],
+    ["/api/recepcion/admisiones/7/cobertura", "PUT", { credencialId: null }],
   ]);
 });

@@ -1,31 +1,14 @@
 import { z } from "zod";
 import type { ReceptionTriageForm } from "@/lib/api/types";
+import { fechaLocalAIso, hoyIso } from "./date-format";
 
-// La fecha de nacimiento se edita con un <input type="date" /> nativo,
-// por lo que el formulario trabaja siempre en formato ISO (AAAA-MM-DD),
-// que es el mismo formato que espera el backend.
-export function obtenerHoyIso() {
-  const hoy = new Date();
-  const anio = hoy.getFullYear();
-  const mes = String(hoy.getMonth() + 1).padStart(2, "0");
-  const dia = String(hoy.getDate()).padStart(2, "0");
-  return `${anio}-${mes}-${dia}`;
-}
+const EDAD_MAXIMA = 120;
 
-function esFechaNacimientoValida(valor: string) {
-  const coincidencia = valor.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!coincidencia) return false;
-  const anio = Number(coincidencia[1]);
-  const mes = Number(coincidencia[2]);
-  const dia = Number(coincidencia[3]);
-  const candidata = new Date(anio, mes - 1, dia);
-  const esReal = candidata.getFullYear() === anio
-    && candidata.getMonth() === mes - 1
-    && candidata.getDate() === dia;
-  if (!esReal) return false;
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  return candidata < hoy;
+function fechaNacimientoMinima(hoy: string) {
+  const [anio, mes, dia] = hoy.split("-");
+  const anioMinimo = Number(anio) - EDAD_MAXIMA;
+  const ultimoDiaMes = new Date(Date.UTC(anioMinimo, Number(mes), 0)).getUTCDate();
+  return `${anioMinimo}-${mes}-${String(Math.min(Number(dia), ultimoDiaMes)).padStart(2, "0")}`;
 }
 
 export const dniSchema = z.object({
@@ -39,13 +22,17 @@ export const patientSchema = z.object({
   dni: z.string().regex(/^\d{7,8}$/, "Ingresá un DNI válido."),
   nombre: z.string().trim().min(1, "Ingresá el nombre."),
   apellido: z.string().trim().min(1, "Ingresá el apellido."),
-  fechaNacimiento: z.string().refine(
-    esFechaNacimientoValida,
-    "Elegí una fecha válida anterior a hoy.",
-  ),
-  generoBiologico: z.enum(["MASCULINO", "FEMENINO", "X"]),
+  fechaNacimiento: z.string()
+    .transform(fechaLocalAIso)
+    .pipe(z.string("Ingresá una fecha válida en formato dd/mm/aaaa."))
+    .refine((fecha) => {
+      const hoy = hoyIso();
+      return fecha >= fechaNacimientoMinima(hoy) && fecha < hoy;
+    }, `La fecha debe ser anterior a hoy y corresponder a una edad de hasta ${EDAD_MAXIMA} años.`),
+  generoBiologico: z.string().pipe(z.enum(["MASCULINO", "FEMENINO", "X"], "Seleccioná el género biológico.")),
   telefono: z
     .string()
+    .trim()
     .regex(/^[+0-9 ()-]{6,25}$/, "Ingresá un teléfono válido."),
   correoElectronico: z
     .string()
@@ -56,10 +43,12 @@ export const patientSchema = z.object({
   piso: z.string(),
   ciudad: z.string().trim().min(1, "Ingresá la localidad o el barrio."),
   provincia: z.string().trim().min(1, "Ingresá la provincia."),
+  codigoPostal: z.string().trim(),
   codigoEspecialidad: z.string().min(1, "Seleccioná una especialidad."),
 });
 
-export type PatientFormValues = z.infer<typeof patientSchema>;
+export type PatientFormValues = z.input<typeof patientSchema>;
+export type PatientAdmissionValues = z.output<typeof patientSchema>;
 
 export const clinicalSchema = z.object({
   motivoConsulta: z.string().trim().min(3, "Describí el motivo principal."),

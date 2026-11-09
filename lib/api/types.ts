@@ -13,6 +13,7 @@ export type ReceptionAdmission = Omit<ApiSchemas["AdmisionRecepcionDTO"], "estim
 };
 export type ReceptionAdmissionDetail =
   ApiSchemas["AdmisionRecepcionDetalleDTO"];
+export type ReceptionCoverage = ApiSchemas["CoberturaRecepcionDTO"];
 export type CreateReceptionAdmission = Omit<
   ApiSchemas["CrearAdmisionRecepcionRequest"],
   "codigoPostal"

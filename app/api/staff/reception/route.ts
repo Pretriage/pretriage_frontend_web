@@ -8,6 +8,7 @@ import type {
   ReceptionAdmission,
   ReceptionAdmissionDetail,
   ReceptionBootstrap,
+  ReceptionCoverage,
   ReceptionHospital,
   ReceptionPatient,
   ReceptionSession,
@@ -108,15 +109,30 @@ export async function POST(request: Request) {
           ),
         );
       }
-      case "createPatientCredential": {
+      case "createPatientCredential":
+      case "updatePatientCredential": {
         const patientId = numberValue(body.patientId, "patientId");
+        const updating = body.operation === "updatePatientCredential";
+        const path = `/api/pacientes/${patientId}/obrasocial`;
         return NextResponse.json(
           await backendRequest<{ mensaje?: string }>(
-            `/api/pacientes/${patientId}/obrasocial/credencial`,
+            updating
+              ? `${path}/credenciales/${numberValue(body.credentialId, "credentialId")}`
+              : `${path}/credencial`,
             {
-              method: "POST",
+              method: updating ? "PUT" : "POST",
               body: JSON.stringify(credentialValue(body.credential)),
             },
+          ),
+        );
+      }
+      case "selectCoverage": {
+        const admissionId = numberValue(body.admissionId, "admissionId");
+        const credencialId = body.credentialId === null ? null : numberValue(body.credentialId, "credentialId");
+        return NextResponse.json(
+          await backendRequest<ReceptionCoverage>(
+            `/api/recepcion/admisiones/${admissionId}/cobertura`,
+            { method: "PUT", body: JSON.stringify({ credencialId }) },
           ),
         );
       }

@@ -15,22 +15,25 @@ import type {
   ReceptionAdmission,
   ReceptionAdmissionDetail,
   ReceptionBootstrap,
+  ReceptionCoverage,
   ReceptionPatient,
   ReceptionSession,
 } from "@/lib/api/types";
 import type { HospitalRole } from "@/lib/staff-context";
+import { fechaIsoALocal } from "@/features/reception/date-format";
 import { ReceptionCoverageStep } from "@/features/reception/reception-coverage-step";
 import {
   clinicalSchema,
   emptyClinicalForm,
-  obtenerHoyIso,
   patientSchema,
   toTriageRequest,
   type ClinicalFormValues,
+  type PatientAdmissionValues,
   type PatientFormValues,
 } from "@/features/reception/schema";
 
 type Stage = "dashboard" | "search" | "patient" | "coverage" | "triage" | "review" | "done";
+type OpenAdmission = ReceptionAdmission & { patientName: string; coverage?: ReceptionCoverage | null };
 const receptionApi = "/api/staff/reception";
 
 function messageFrom(error: unknown) {
@@ -79,7 +82,7 @@ function activeAttentionLabel(state?: ReceptionPatient["estadoAtencionEnCurso"])
     ATRASADO: "Paciente demorado",
     EN_ATENCION: "En atención",
   };
-  return state ? labels[state] ?? "Atención activa" : "Atención activa";
+  return state ? labels[state] : undefined;
 }
 
 function formatTime(value?: string) {
@@ -97,9 +100,9 @@ function formatEstimate(from?: string, to?: string, estimated?: string) {
 
 const emptyPatient: PatientFormValues = {
   dni: "", nombre: "", apellido: "", fechaNacimiento: "",
-  generoBiologico: "X", telefono: "", correoElectronico: "",
+  generoBiologico: "", telefono: "", correoElectronico: "",
   calle: "", alturaDomicilio: "", piso: "", ciudad: "", provincia: "",
-  codigoEspecialidad: "",
+  codigoPostal: "", codigoEspecialidad: "",
 };
 
 export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, canSwitchHospital }: {
@@ -113,7 +116,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
   const [stage, setStage] = useState<Stage>("dashboard");
   const [patient, setPatient] = useState<ReceptionPatient | null>(null);
   const [searchedDni, setSearchedDni] = useState("");
-  const [admission, setAdmission] = useState<ReceptionAdmission | null>(null);
+  const [admission, setAdmission] = useState<OpenAdmission | null>(null);
   const [review, setReview] = useState<ClinicalFormValues | null>(null);
   const [result, setResult] = useState<ReceptionAdmission | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -131,7 +134,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
     () => bootstrap.data?.hospitals.find((item) => item.id === hospitalId),
     [bootstrap.data?.hospitals, hospitalId],
   );
-  const patientForm = useForm<PatientFormValues>({
+  const patientForm = useForm<PatientFormValues, unknown, PatientAdmissionValues>({
     resolver: zodResolver(patientSchema), defaultValues: emptyPatient,
   });
   const clinicalForm = useForm<ClinicalFormValues>({
@@ -148,7 +151,6 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
   );
   const isCaba = province?.name === "Ciudad Autónoma de Buenos Aires";
   const localityLabel = !selectedProvince ? "Localidad o barrio" : isCaba ? "Barrio" : "Localidad";
-  const fechaMaxima = useMemo(() => obtenerHoyIso(), []);
   const dniForm = useForm<{ dni: string }>({ defaultValues: { dni: "" } });
 
   useEffect(() => {
@@ -173,19 +175,24 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
     mutationFn: (data: { dni: string; sessionId: number }) =>
       apiClient<ReceptionPatient>(receptionApi, "searchPatient", data),
     onSuccess: (found, variables) => {
+      if (found.atencionEnCurso) {
+        blockActiveAttention(variables.dni, found.estadoAtencionEnCurso);
+        return;
+      }
       setPatient(found);
       setSearchedDni(variables.dni);
       setSearchError(null);
       patientForm.reset({
         dni: variables.dni,
         nombre: found.nombre ?? "", apellido: found.apellido ?? "",
-        fechaNacimiento: found.fechaNacimiento ?? "",
-        generoBiologico: found.generoBiologico ?? "X",
+        fechaNacimiento: fechaIsoALocal(found.fechaNacimiento),
+        generoBiologico: found.generoBiologico ?? "",
         telefono: found.telefono ?? "",
         correoElectronico: found.correoElectronico ?? "",
         calle: found.calle ?? "", alturaDomicilio: found.alturaDomicilio ?? "",
         piso: found.piso ?? "", ciudad: found.ciudad ?? "",
         provincia: found.provincia ?? "",
+        codigoPostal: found.codigoPostal ?? "",
         codigoEspecialidad: "",
       });
       setStage("patient");
@@ -205,10 +212,27 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
       apiClient<ReceptionAdmission>(receptionApi, "createAdmission", {
         admission: payload,
       }),
-    onSuccess: (created) => {
-      setAdmission(created);
+    onSuccess: (created, payload) => {
+      setAdmission({ ...created, patientName: `${payload.nombre} ${payload.apellido}`.trim() });
       clinicalForm.reset(emptyClinicalForm);
       setStage(created.pacienteId ? "coverage" : "triage");
+      void refresh();
+    },
+    onError: async (error, payload) => {
+      if (!(error instanceof ClientApiError) || error.status !== 409) return;
+      const found = await apiClient<ReceptionPatient>(receptionApi, "searchPatient", {
+        dni: payload.dni,
+        sessionId: payload.sesionId,
+      }).catch(() => null);
+      if (found?.atencionEnCurso) blockActiveAttention(payload.dni, found.estadoAtencionEnCurso);
+    },
+  });
+  const selectCoverage = useMutation({
+    mutationFn: (data: { admissionId: number; credentialId: number | null }) =>
+      apiClient<ReceptionCoverage>(receptionApi, "selectCoverage", data),
+    onSuccess: (coverage) => {
+      setAdmission((current) => current && { ...current, coverage: coverage.credencialId ? coverage : null });
+      setStage("triage");
       void refresh();
     },
   });
@@ -240,6 +264,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
   function resetFlow() {
     setStage("dashboard"); setPatient(null); setSearchedDni("");
     setAdmission(null); setReview(null); setResult(null); setSearchError(null);
+    selectCoverage.reset();
     dniForm.reset(); patientForm.reset(emptyPatient);
     clinicalForm.reset(emptyClinicalForm);
   }
@@ -250,6 +275,8 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
       id: open.id, consultaId: open.consultaId, pacienteId: open.pacienteId,
       codigoLlamado: open.codigoLlamado, estado: open.estado,
       prioridad: open.prioridad, estimacion: open.estimacion,
+      patientName: [open.pacienteNombre, open.pacienteApellido].filter(Boolean).join(" "),
+      coverage: open.coberturaConfirmada ? open.cobertura ?? null : undefined,
     });
     const stored = sessionStorage.getItem(draftKey(open.id));
     try {
@@ -258,10 +285,12 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
     } catch {
       clinicalForm.reset(emptyClinicalForm);
     }
-    setStage("triage");
+    setStage(open.pacienteId && open.coberturaConfirmada === false ? "coverage" : "triage");
   }
 
   function submitDni({ dni }: { dni: string }) {
+    if (searchPatient.isPending) return;
+    setSearchError(null);
     const normalized = dni.replace(/\D/g, "");
     if (!/^\d{7,8}$/.test(normalized)) {
       dniForm.setError("dni", { message: "Ingresá un DNI de 7 u 8 dígitos." });
@@ -270,11 +299,20 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
     }
   }
 
-  function submitPatient(valores: PatientFormValues) {
-    if (!session?.id || patient?.atencionEnCurso) return;
+  function blockActiveAttention(dni: string, state: ReceptionPatient["estadoAtencionEnCurso"]) {
+    const label = activeAttentionLabel(state);
+    setSearchError(`Este paciente ya tiene una atención en curso${label ? `: ${label}` : ""}. Debe finalizarse o cancelarse antes de crear una nueva admisión.`);
+    setPatient(null);
+    setSearchedDni("");
+    dniForm.reset({ dni });
+    patientForm.reset(emptyPatient);
+    setStage("search");
+  }
+
+  function submitPatient(valores: PatientAdmissionValues) {
+    if (!session?.id || createAdmission.isPending) return;
     createAdmission.mutate({
       sesionId: session.id, ...valores,
-      correoElectronico: valores.correoElectronico || undefined,
       piso: valores.piso || undefined,
     });
   }
@@ -376,12 +414,12 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
         <header className="page-heading"><p className="eyebrow">Nueva admisión</p><h1>Buscar paciente</h1><p>Usá el DNI físico para encontrar o registrar al paciente.</p></header>
         <form className="panel form-panel" onSubmit={dniForm.handleSubmit(submitDni)}>
           <RequiredFieldsNote />
-          <label className="field"><RequiredLabel>DNI</RequiredLabel><input aria-required="true" autoFocus inputMode="numeric" placeholder="Ej. 12345678" {...dniForm.register("dni")} /><FieldError message={dniForm.formState.errors.dni?.message} /></label>
+          <label className="field"><RequiredLabel>DNI</RequiredLabel><input aria-required="true" autoFocus disabled={searchPatient.isPending} inputMode="numeric" placeholder="Ej. 12345678" {...dniForm.register("dni", { onChange: () => setSearchError(null) })} /><FieldError message={dniForm.formState.errors.dni?.message} /></label>
+          {searchError ? <div className="notice notice-error" role="alert">{searchError}</div> : null}
           <div className="form-actions">
-            <button className="button button-secondary" type="button" onClick={resetFlow}>Cancelar</button>
+            <button className="button button-secondary" disabled={searchPatient.isPending} type="button" onClick={resetFlow}>Cancelar</button>
             <button className="button button-primary" disabled={searchPatient.isPending} type="submit">{searchPatient.isPending ? "Buscando…" : "Buscar paciente"}</button>
           </div>
-          {searchError ? <div className="notice notice-error">{searchError}</div> : null}
         </form>
       </div>,
       "Pacientes",
@@ -389,6 +427,11 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
   }
   if (stage === "patient") {
     const specialties = activeHospital?.especialidades ?? [];
+    const missingDetails = patient ? [
+      !fechaIsoALocal(patient.fechaNacimiento) ? "fecha de nacimiento" : null,
+      !patient.generoBiologico ? "género biológico" : null,
+      !patient.telefono?.trim() ? "teléfono" : null,
+    ].filter((item) => item !== null) : [];
     return shell(
       <div className="page-stack">
         <Progress active={0} />
@@ -397,83 +440,110 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
           <h1>Datos del paciente</h1>
           <p>{patient ? "Verificá los datos antes de crear la admisión." : `No encontramos coincidencias para el DNI ${searchedDni}.`}</p>
         </header>
-        <form className="panel form-panel" onSubmit={patientForm.handleSubmit(submitPatient)}>
-          <RequiredFieldsNote />
-          {patient?.atencionEnCurso ? (
-            <div className="notice notice-warning" role="alert">
-              Este paciente ya tiene una atención en curso: <strong>{activeAttentionLabel(patient.estadoAtencionEnCurso)}</strong>.
-              Debe finalizarse o cancelarse antes de crear una nueva admisión.
+        <form className="form-panel" onSubmit={patientForm.handleSubmit(submitPatient)}>
+          <section className="panel form-panel" aria-labelledby="reception-specialty-heading">
+            <div className="panel-heading">
+              <div><h2 id="reception-specialty-heading">Especialidad de esta atención</h2><p>Elegí una especialidad para la nueva admisión.</p></div>
             </div>
-          ) : null}
-          <div className="form-grid">
-            <label className="field"><RequiredLabel>DNI</RequiredLabel><input aria-required="true" readOnly {...patientForm.register("dni")} /><FieldError message={patientForm.formState.errors.dni?.message} /></label>
-            <label className="field"><RequiredLabel>Especialidad</RequiredLabel><select aria-required="true" {...patientForm.register("codigoEspecialidad")}><option value="">Seleccionar</option>{specialties.map((item) => <option key={item.codigo} value={item.codigo}>{item.nombre}</option>)}</select><FieldError message={patientForm.formState.errors.codigoEspecialidad?.message} /></label>
-            <label className="field"><RequiredLabel>Nombre</RequiredLabel><input aria-required="true" {...patientForm.register("nombre")} /><FieldError message={patientForm.formState.errors.nombre?.message} /></label>
-            <label className="field"><RequiredLabel>Apellido</RequiredLabel><input aria-required="true" {...patientForm.register("apellido")} /><FieldError message={patientForm.formState.errors.apellido?.message} /></label>
-            <label className="field"><RequiredLabel>Fecha de nacimiento</RequiredLabel><input aria-required="true" type="date" max={fechaMaxima} {...patientForm.register("fechaNacimiento")} /><FieldError message={patientForm.formState.errors.fechaNacimiento?.message} /></label>
-            <label className="field"><RequiredLabel>Género biológico</RequiredLabel><select aria-required="true" {...patientForm.register("generoBiologico")}><option value="FEMENINO">Femenino</option><option value="MASCULINO">Masculino</option><option value="X">X / No especificado</option></select></label>
-            <label className="field"><RequiredLabel>Teléfono</RequiredLabel><input aria-required="true" {...patientForm.register("telefono")} /><FieldError message={patientForm.formState.errors.telefono?.message} /></label>
-            <label className="field"><span>Correo electrónico</span><input type="email" {...patientForm.register("correoElectronico")} /><FieldError message={patientForm.formState.errors.correoElectronico?.message} /></label>
-            <label className="field field-wide"><RequiredLabel>Calle</RequiredLabel><input aria-required="true" {...patientForm.register("calle")} /><FieldError message={patientForm.formState.errors.calle?.message} /></label>
-            <label className="field"><RequiredLabel>Altura</RequiredLabel><input aria-required="true" {...patientForm.register("alturaDomicilio")} /><FieldError message={patientForm.formState.errors.alturaDomicilio?.message} /></label>
-            <label className="field"><span>Piso</span><input {...patientForm.register("piso")} /></label>
-            <div className="field">
-              <label htmlFor="reception-province"><RequiredLabel>Provincia</RequiredLabel></label>
-              <Controller control={patientForm.control} name="provincia" render={({ field }) => (
-                <SearchableCombobox
-                  id="reception-province"
-                  required
-                  value={field.value}
-                  options={argentinaLocations.provinces.map((item) => item.name)}
-                  onChange={(value) => {
-                    field.onChange(value);
-                    patientForm.setValue("ciudad", "", { shouldDirty: true });
-                  }}
-                />
-              )} />
-              <FieldError message={patientForm.formState.errors.provincia?.message} />
+            <RequiredFieldsNote />
+            <label className="field">
+              <RequiredLabel>Especialidad</RequiredLabel>
+              <select aria-required="true" {...patientForm.register("codigoEspecialidad")}>
+                <option value="">Seleccioná una especialidad</option>
+                {specialties.map((item) => <option key={item.codigo} value={item.codigo}>{item.nombre}</option>)}
+              </select>
+              <FieldError message={patientForm.formState.errors.codigoEspecialidad?.message} />
+            </label>
+          </section>
+          <section className="panel form-panel" aria-labelledby="reception-patient-heading">
+            <div className="panel-heading">
+              <div><h2 id="reception-patient-heading">Datos personales y domicilio</h2>{patient ? <p>Revisá los datos guardados y corregí lo que haga falta.</p> : null}</div>
             </div>
-            <div className="field">
-              <label htmlFor="reception-locality"><RequiredLabel>{localityLabel}</RequiredLabel></label>
-              <Controller control={patientForm.control} name="ciudad" render={({ field }) => (
-                <SearchableCombobox
-                  id="reception-locality"
-                  required
-                  value={field.value}
-                  options={province?.cities ?? []}
-                  disabled={!selectedProvince}
-                  placeholder={!selectedProvince ? "Seleccioná primero una provincia" : isCaba ? "Buscar barrio" : "Buscar localidad"}
-                  onChange={field.onChange}
-                />
-              )} />
-              <FieldError message={patientForm.formState.errors.ciudad?.message} />
+            {missingDetails.length ? <p className="notice notice-info">Todavía falta registrar {new Intl.ListFormat("es-AR").format(missingDetails)}.</p> : null}
+            <div className="form-grid">
+              <label className="field"><RequiredLabel>DNI</RequiredLabel><input aria-required="true" readOnly {...patientForm.register("dni")} /><FieldError message={patientForm.formState.errors.dni?.message} /></label>
+              <label className="field"><RequiredLabel>Nombre</RequiredLabel><input aria-required="true" {...patientForm.register("nombre")} /><FieldError message={patientForm.formState.errors.nombre?.message} /></label>
+              <label className="field"><RequiredLabel>Apellido</RequiredLabel><input aria-required="true" {...patientForm.register("apellido")} /><FieldError message={patientForm.formState.errors.apellido?.message} /></label>
+              <label className="field">
+                <RequiredLabel>Fecha de nacimiento</RequiredLabel>
+                <input aria-required="true" placeholder="dd/mm/aaaa" maxLength={10} {...patientForm.register("fechaNacimiento")} />
+                <FieldError message={patientForm.formState.errors.fechaNacimiento?.message} />
+              </label>
+              <label className="field">
+                <RequiredLabel>Género biológico</RequiredLabel>
+                <select aria-required="true" {...patientForm.register("generoBiologico")}>
+                  <option value="">Seleccioná una opción</option>
+                  <option value="FEMENINO">Femenino</option>
+                  <option value="MASCULINO">Masculino</option>
+                  <option value="X">X / No especificado</option>
+                </select>
+                <FieldError message={patientForm.formState.errors.generoBiologico?.message} />
+              </label>
+              <label className="field"><RequiredLabel>Teléfono</RequiredLabel><input aria-required="true" type="tel" {...patientForm.register("telefono")} /><FieldError message={patientForm.formState.errors.telefono?.message} /></label>
+              <label className="field"><span>Correo electrónico</span><input type="email" {...patientForm.register("correoElectronico")} /><FieldError message={patientForm.formState.errors.correoElectronico?.message} /></label>
+              <label className="field field-wide"><RequiredLabel>Calle</RequiredLabel><input aria-required="true" {...patientForm.register("calle")} /><FieldError message={patientForm.formState.errors.calle?.message} /></label>
+              <label className="field"><RequiredLabel>Altura</RequiredLabel><input aria-required="true" {...patientForm.register("alturaDomicilio")} /><FieldError message={patientForm.formState.errors.alturaDomicilio?.message} /></label>
+              <label className="field"><span>Piso</span><input {...patientForm.register("piso")} /></label>
+              <div className="field">
+                <label htmlFor="reception-province"><RequiredLabel>Provincia</RequiredLabel></label>
+                <Controller control={patientForm.control} name="provincia" render={({ field }) => (
+                  <SearchableCombobox
+                    id="reception-province"
+                    required
+                    value={field.value}
+                    options={argentinaLocations.provinces.map((item) => item.name)}
+                    onChange={(value) => {
+                      field.onChange(value);
+                      patientForm.setValue("ciudad", "", { shouldDirty: true });
+                    }}
+                  />
+                )} />
+                <FieldError message={patientForm.formState.errors.provincia?.message} />
+              </div>
+              <div className="field">
+                <label htmlFor="reception-locality"><RequiredLabel>{localityLabel}</RequiredLabel></label>
+                <Controller control={patientForm.control} name="ciudad" render={({ field }) => (
+                  <SearchableCombobox
+                    id="reception-locality"
+                    required
+                    value={field.value}
+                    options={province?.cities ?? []}
+                    disabled={!selectedProvince}
+                    placeholder={!selectedProvince ? "Seleccioná primero una provincia" : isCaba ? "Buscar barrio" : "Buscar localidad"}
+                    onChange={field.onChange}
+                  />
+                )} />
+                <FieldError message={patientForm.formState.errors.ciudad?.message} />
+              </div>
+              <label className="field"><span>Código postal</span><input {...patientForm.register("codigoPostal")} /></label>
             </div>
-          </div>
-          <div className="form-actions">
-            <button className="button button-secondary" type="button" onClick={() => setStage("search")}>Volver</button>
-            <button className="button button-primary" disabled={createAdmission.isPending || patient?.atencionEnCurso} type="submit">
-              {patient?.atencionEnCurso ? "Atención en curso" : createAdmission.isPending ? "Creando…" : "Crear admisión"}
-            </button>
-          </div>
-          <ErrorNotice error={createAdmission.error} />
+            <div className="form-actions">
+              <button className="button button-secondary" disabled={createAdmission.isPending} type="button" onClick={() => { createAdmission.reset(); setStage("search"); }}>Cambiar DNI</button>
+              <button className="button button-primary" disabled={createAdmission.isPending} type="submit">
+                {createAdmission.isPending ? "Creando…" : "Crear admisión"}
+              </button>
+            </div>
+            <ErrorNotice error={createAdmission.error} />
+          </section>
         </form>
       </div>,
       "Admisiones",
     );
   }
   if (stage === "coverage" && admission?.pacienteId) {
-    const patientValues = patientForm.getValues();
     return shell(
       <div className="page-stack">
         <Progress active={1} />
         <ReceptionCoverageStep
           patientId={admission.pacienteId}
-          patientName={`${patientValues.nombre} ${patientValues.apellido}`.trim() || "Paciente"}
-          onContinue={() => setStage("triage")}
+          patientName={admission.patientName || "Paciente"}
+          initialCredentialId={admission.coverage?.credencialId}
+          onContinue={(credentialId) => admission.id && selectCoverage.mutate({ admissionId: admission.id, credentialId })}
           onCancel={() => admission.id && cancelAdmission.mutate(admission.id)}
           isCancelling={cancelAdmission.isPending}
+          isContinuing={selectCoverage.isPending}
         />
-        <ErrorNotice error={cancelAdmission.error} />
+        <ErrorNotice error={selectCoverage.error ?? cancelAdmission.error} />
       </div>,
       "Admisiones",
     );
@@ -482,7 +552,12 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
     return shell(
       <div className="page-stack">
         <Progress active={2} />
-        <header className="page-heading"><p className="eyebrow">Admisión #{admission?.id}</p><h1>Motivo y estado actual</h1><p>Registrá lo informado por el paciente una sola vez, sin interpretar.</p></header>
+        <header className="page-heading">
+          <p className="eyebrow">Admisión #{admission?.id}</p>
+          <h1>Motivo y estado actual</h1>
+          <p>Registrá lo informado por el paciente una sola vez, sin interpretar.</p>
+          {admission?.coverage !== undefined ? <p>Cobertura registrada: {admission.coverage?.nombreObraSocial ?? "Sin cobertura"}.</p> : null}
+        </header>
         <form
           className="panel form-panel"
           onSubmit={clinicalForm.handleSubmit((values) => {
@@ -527,6 +602,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
               type="button"
               onClick={() => admission?.id && cancelAdmission.mutate(admission.id)}
             >Cancelar admisión</button>
+            {admission?.pacienteId ? <button className="button button-secondary" type="button" disabled={cancelAdmission.isPending} onClick={() => setStage("coverage")}>Editar cobertura</button> : null}
             <button className="button button-primary" type="submit">Revisar información</button>
           </div>
           <ErrorNotice error={cancelAdmission.error} />
