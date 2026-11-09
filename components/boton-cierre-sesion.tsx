@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { withSessionRequest } from "@/lib/session-request";
 
 type PropiedadesBotonCierreSesion = {
   clase?: string;
@@ -33,11 +34,11 @@ export function BotonCierreSesion({
     if (enProceso) return;
     setEnProceso(true);
     try {
-      await fetch("/api/auth/logout", {
+      await withSessionRequest(() => fetch("/api/auth/logout", {
         method: "POST",
         cache: "no-store",
         credentials: "same-origin",
-      }).catch(() => null);
+      })).catch(() => null);
     } finally {
       limpiarEstadoLocal();
       // replace rompe el historial: atrás ya no vuelve a la pantalla sensible.

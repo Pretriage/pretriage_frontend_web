@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { WorkspaceSelector } from "@/features/workspaces/workspace-selector";
 import { getSession } from "@/lib/session";
-import { getStaffContext } from "@/lib/staff-context";
+import { getStaffContext, staffDisplayName } from "@/lib/staff-context";
 import { defaultHospitalRoute } from "@/lib/workspace-routing";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ export default async function Home() {
   return (
     <WorkspaceSelector
       memberships={context?.membresias ?? []}
-      accountLabel={session.user.name ?? session.user.email ?? "usuario"}
+      accountLabel={staffDisplayName(context, session.user, "usuario")}
       platformAdmin={context?.administradorPlataforma ?? false}
     />
   );

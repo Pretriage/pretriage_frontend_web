@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
+import { SearchableCombobox } from "@/components/searchable-combobox";
 import { StaffShell } from "@/components/staff-shell";
 import { apiClient } from "@/lib/api/client";
 import { NIVELES_GRAVEDAD_BOT, nivelGravedadClass, nivelGravedadLabel } from "@/lib/severity";
@@ -303,39 +304,55 @@ export function DoctorWorkspace({
         </header>
         <section className="panel form-panel">
           <RequiredFieldsNote />
-          <label className="field">
-            <RequiredLabel>Especialidad</RequiredLabel>
-            <select required value={assignmentKey} onChange={(event) => { setAssignmentKey(event.target.value); setSectorId(""); setRoomId(""); }}>
-              <option value="">Seleccionar</option>
-              {assignments.map((item) => (
-                <option key={item.codigoEspecialidad} value={item.codigoEspecialidad}>
-                  {item.nombreEspecialidad}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="field">
+            <label htmlFor="doctor-specialty"><RequiredLabel>Especialidad</RequiredLabel></label>
+            <SearchableCombobox
+              id="doctor-specialty"
+              required
+              value={assignmentKey}
+              placeholder="Seleccioná una especialidad"
+              options={assignments.flatMap(({ codigoEspecialidad, nombreEspecialidad }) => codigoEspecialidad
+                ? [{ value: codigoEspecialidad, label: nombreEspecialidad ?? codigoEspecialidad }]
+                : [])}
+              onChange={(value) => { setAssignmentKey(value); setSectorId(""); setRoomId(""); }}
+            />
+          </div>
           {!assignments.length ? (
             <div className="notice notice-warning">
               No tenés especialidades médicas asignadas en {activeHospitalName}.
             </div>
           ) : null}
-          <label className="field">
-            <RequiredLabel>Sector</RequiredLabel>
-            <select required disabled={!selectedAssignment || sectors.isFetching || !sectors.data?.length} value={sectorId} onChange={(event) => { setSectorId(event.target.value); setRoomId(""); }}>
-              <option value="">{!selectedAssignment ? "Elegí una especialidad primero" : sectors.isFetching ? "Cargando…" : "Seleccionar"}</option>
-              {(sectors.data ?? []).map((sector) => <option key={sector.id} value={sector.id}>{sector.nombre}</option>)}
-            </select>
-          </label>
+          <div className="field">
+            <label htmlFor="doctor-sector"><RequiredLabel>Sector</RequiredLabel></label>
+            <SearchableCombobox
+              id="doctor-sector"
+              required
+              disabled={!selectedAssignment || sectors.isFetching || !sectors.data?.length}
+              value={sectorId}
+              placeholder={!selectedAssignment ? "Elegí una especialidad primero" : sectors.isFetching ? "Cargando…" : "Seleccioná un sector"}
+              options={(sectors.data ?? []).flatMap(({ id, nombre }) => id === undefined
+                ? []
+                : [{ value: String(id), label: nombre ?? String(id) }])}
+              onChange={(value) => { setSectorId(value); setRoomId(""); }}
+            />
+          </div>
           {selectedAssignment && !sectors.isPending && sectors.data?.length === 0 ? (
             <div className="notice notice-warning">No hay sectores activos para esta especialidad en {activeHospitalName}. Consultá con la administración del hospital.</div>
           ) : null}
-          <label className="field">
-            <RequiredLabel>Consultorio</RequiredLabel>
-            <select required disabled={!selectedSector || rooms.isFetching || !rooms.data?.length} value={roomId} onChange={(event) => setRoomId(event.target.value)}>
-              <option value="">{!selectedSector ? "Elegí un sector primero" : rooms.isFetching ? "Cargando…" : "Seleccionar"}</option>
-              {(rooms.data ?? []).map((room) => <option key={room.id} value={room.id}>{room.nombre}</option>)}
-            </select>
-          </label>
+          <div className="field">
+            <label htmlFor="doctor-room"><RequiredLabel>Consultorio</RequiredLabel></label>
+            <SearchableCombobox
+              id="doctor-room"
+              required
+              disabled={!selectedSector || rooms.isFetching || !rooms.data?.length}
+              value={roomId}
+              placeholder={!selectedSector ? "Elegí un sector primero" : rooms.isFetching ? "Cargando…" : "Seleccioná un consultorio"}
+              options={(rooms.data ?? []).flatMap(({ id, nombre }) => id === undefined
+                ? []
+                : [{ value: String(id), label: nombre ?? String(id) }])}
+              onChange={setRoomId}
+            />
+          </div>
           {selectedSector && !rooms.isPending && rooms.data?.length === 0 ? (
             <div className="notice notice-warning">No hay consultorios activos en {selectedSector.nombre} para esta especialidad. Consultá con la administración del hospital.</div>
           ) : null}
@@ -433,17 +450,21 @@ export function DoctorWorkspace({
                   ) : editingPriority ? (
                     <div className="priority-correction">
                       <RequiredFieldsNote />
-                      <label className="field">
-                        <RequiredLabel>{partialWithoutAiSummary ? "Prioridad clínica que vas a asignar" : "Nueva prioridad"}</RequiredLabel>
-                        <select required value={correctedPriority} onChange={(event) => setCorrectedPriority(event.target.value)}>
-                          <option value="">Seleccionar</option>
-                          {NIVELES_GRAVEDAD_BOT.map((priority) => (
-                            <option key={priority} value={priority} disabled={priority === pretriage.data.prioridadPreliminar}>
-                              {priorityLabel(priority)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <div className="field">
+                        <label htmlFor="doctor-priority"><RequiredLabel>{partialWithoutAiSummary ? "Prioridad clínica que vas a asignar" : "Nueva prioridad"}</RequiredLabel></label>
+                        <SearchableCombobox
+                          id="doctor-priority"
+                          required
+                          value={correctedPriority}
+                          placeholder="Seleccioná una prioridad"
+                          options={NIVELES_GRAVEDAD_BOT.map((priority) => ({
+                            value: priority,
+                            label: priorityLabel(priority),
+                            disabled: priority === pretriage.data.prioridadPreliminar,
+                          }))}
+                          onChange={setCorrectedPriority}
+                        />
+                      </div>
                       <label className="field">
                         <span>Motivo breve</span>
                         <textarea rows={2} maxLength={500} value={priorityReason} onChange={(event) => setPriorityReason(event.target.value)} placeholder="Ej.: la evaluación clínica no muestra signos de alarma" />

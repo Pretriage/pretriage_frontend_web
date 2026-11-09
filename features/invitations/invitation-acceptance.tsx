@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Brand } from "@/components/brand";
 import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
+import { formatoFechaHoraArgentina } from "@/lib/argentina-date";
 
 const STRONG_PASSWORD = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/;
 
@@ -56,7 +57,7 @@ export function InvitationAcceptance({ loggedIn }: { loggedIn: boolean }) {
     {summary.error ? <div className="notice notice-error" role="alert">{summary.error.message}</div> : null}
     {summary.data ? <>
       <h1>{summary.data.hospitalNombre}</h1><p className="muted">Invitación para <strong>{summary.data.email}</strong></p>
-      <div className="summary-list"><div><dt>Roles</dt><dd>{summary.data.roles.join(", ")}</dd></div><div><dt>Vence</dt><dd>{new Date(summary.data.venceEn).toLocaleString("es-AR")}</dd></div>{summary.data.matricula ? <div><dt>Matrícula</dt><dd>{summary.data.tipoMatricula?.toLocaleLowerCase("es")} {summary.data.matricula} · {summary.data.jurisdiccionMatricula}</dd></div> : null}</div>
+      <div className="summary-list"><div><dt>Roles</dt><dd>{summary.data.roles.join(", ")}</dd></div><div><dt>Vence</dt><dd>{formatoFechaHoraArgentina(summary.data.venceEn)}</dd></div>{summary.data.matricula ? <div><dt>Matrícula</dt><dd>{summary.data.tipoMatricula?.toLocaleLowerCase("es")} {summary.data.matricula} · {summary.data.jurisdiccionMatricula}</dd></div> : null}</div>
       {summary.data.cuentaExistente ? loggedIn ? <button className="button button-primary button-wide" disabled={accept.isPending} onClick={() => accept.mutate()}>{accept.isPending ? "Aceptando…" : "Aceptar invitación"}</button> : <div style={{ display: "grid", gap: "12px" }}><div className="notice notice-info">Iniciá sesión en otra pestaña, volvé a abrir el enlace y aceptá con tu cuenta existente.</div><a className="button button-primary button-wide" href="/login" target="_blank" rel="noreferrer">Iniciar sesión</a></div> : registered ? <div className="notice notice-success">La cuenta y la membresía quedaron creadas. Ya podés iniciar sesión.</div> : (
         <form className="login-form" onSubmit={submitRegistration}>
           <RequiredFieldsNote />

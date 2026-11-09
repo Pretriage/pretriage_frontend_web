@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
+import { SearchableCombobox } from "@/components/searchable-combobox";
 import locations from "@/lib/geo/argentina-locations.json";
 import type { HospitalConfiguration } from "./hospital-configuration";
 import styles from "./staff-invitation-form.module.css";
@@ -45,8 +46,8 @@ export function StaffInvitationForm({ configuration, disabled = false, error, de
   const emailRef = useRef<HTMLInputElement>(null);
   const roleRef = useRef<HTMLInputElement>(null);
   const matriculaRef = useRef<HTMLInputElement>(null);
-  const tipoRef = useRef<HTMLSelectElement>(null);
-  const jurisdictionRef = useRef<HTMLSelectElement>(null);
+  const tipoRef = useRef<HTMLInputElement>(null);
+  const jurisdictionRef = useRef<HTMLInputElement>(null);
   const specialtyRef = useRef<HTMLInputElement>(null);
   const specialtyGroupRef = useRef<HTMLFieldSetElement>(null);
   const isMedical = roles.includes("MEDICO");
@@ -130,14 +131,38 @@ export function StaffInvitationForm({ configuration, disabled = false, error, de
         <label className={styles.field}><RequiredLabel>Matrícula</RequiredLabel>
           <input ref={matriculaRef} required value={matricula} onChange={(event) => setMatricula(event.target.value)} aria-invalid={invalid("matricula")} aria-describedby={errors.matricula ? "invite-matricula-error" : undefined} />
         </label>
-        <label className={styles.field}><RequiredLabel>Tipo de matrícula</RequiredLabel>
-          <select ref={tipoRef} required value={tipoMatricula} onChange={(event) => setTipoMatricula(event.target.value)} aria-invalid={invalid("tipoMatricula")} aria-describedby={errors.tipoMatricula ? "invite-tipo-error" : undefined}><option value="NACIONAL">Nacional</option><option value="PROVINCIAL">Provincial</option></select>
-        </label>
+        <div className={styles.field}>
+          <label htmlFor="invite-license-type"><RequiredLabel>Tipo de matrícula</RequiredLabel></label>
+          <SearchableCombobox
+            id="invite-license-type"
+            ref={tipoRef}
+            required
+            disabled={disabled}
+            value={tipoMatricula}
+            placeholder="Seleccioná un tipo"
+            options={[{ value: "NACIONAL", label: "Nacional" }, { value: "PROVINCIAL", label: "Provincial" }]}
+            onChange={setTipoMatricula}
+            aria-invalid={invalid("tipoMatricula")}
+            aria-describedby={errors.tipoMatricula ? "invite-tipo-error" : undefined}
+          />
+        </div>
         {errors.matricula ? <p className={styles.error} id="invite-matricula-error">{errors.matricula}</p> : null}
         {errors.tipoMatricula ? <p className={styles.error} id="invite-tipo-error">{errors.tipoMatricula}</p> : null}
-      {tipoMatricula === "PROVINCIAL" ? <label className={`${styles.field} ${styles.wide}`}><RequiredLabel>Provincia</RequiredLabel>
-          <select ref={jurisdictionRef} required value={jurisdiccion} onChange={(event) => setJurisdiccion(event.target.value)} aria-invalid={invalid("jurisdiccionMatricula")} aria-describedby={errors.jurisdiccionMatricula ? "invite-province-error" : undefined}><option value="">Seleccionar provincia</option>{locations.provinces.map((province) => <option key={province.name} value={province.name}>{province.name}</option>)}</select>
-        </label> : null}
+        {tipoMatricula === "PROVINCIAL" ? <div className={`${styles.field} ${styles.wide}`}>
+          <label htmlFor="invite-license-province"><RequiredLabel>Provincia</RequiredLabel></label>
+          <SearchableCombobox
+            id="invite-license-province"
+            ref={jurisdictionRef}
+            required
+            disabled={disabled}
+            value={jurisdiccion}
+            placeholder="Seleccioná una provincia"
+            options={locations.provinces.map((province) => province.name)}
+            onChange={setJurisdiccion}
+            aria-invalid={invalid("jurisdiccionMatricula")}
+            aria-describedby={errors.jurisdiccionMatricula ? "invite-province-error" : undefined}
+          />
+        </div> : null}
         {tipoMatricula === "PROVINCIAL" && errors.jurisdiccionMatricula ? <p className={`${styles.error} ${styles.wide}`} id="invite-province-error">{errors.jurisdiccionMatricula}</p> : null}
       </div>
     </fieldset> : null}

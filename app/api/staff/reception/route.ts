@@ -126,6 +126,16 @@ export async function POST(request: Request) {
           ),
         );
       }
+      case "deletePatientCredential": {
+        const patientId = numberValue(body.patientId, "patientId");
+        const credentialId = numberValue(body.credentialId, "credentialId");
+        return NextResponse.json(
+          await backendRequest<{ mensaje?: string }>(
+            `/api/pacientes/${patientId}/obrasocial/credenciales/${credentialId}`,
+            { method: "DELETE" },
+          ),
+        );
+      }
       case "selectCoverage": {
         const admissionId = numberValue(body.admissionId, "admissionId");
         const credencialId = body.credentialId === null ? null : numberValue(body.credentialId, "credentialId");

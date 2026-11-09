@@ -828,7 +828,7 @@ export interface paths {
             cookie?: never;
         };
         get: operations["me"];
-        put?: never;
+        put: operations["actualizarPerfil"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2007,6 +2007,10 @@ export interface components {
         };
         ActualizarEstadoSalaRequest: {
             activa: boolean;
+        };
+        ActualizarPerfilStaffRequest: {
+            nombre: string;
+            apellido: string;
         };
         StaffMeResponse: {
             id?: string;
@@ -3753,6 +3757,30 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["StaffMeResponse"];
+                };
+            };
+        };
+    };
+    actualizarPerfil: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActualizarPerfilStaffRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {

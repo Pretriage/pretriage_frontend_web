@@ -130,8 +130,12 @@ Validate that the file parses as JSON before generating transport types.
 - Spring Security currently requires authentication globally but does not authorize staff routes from JWT role claims. Role and ownership checks happen in the service layer through the authenticated subject.
 - The provisional frontend calls backend `POST /api/login` through a server-side
   Next.js route and stores access and refresh tokens in separate HttpOnly cookies.
-  The Next proxy renews through `/api/renovar` before protected requests when the
-  access token is within 60 seconds of expiry.
+  `POST /api/auth/sesion` is the web session check. Its middleware renews through
+  `/api/renovar` within 60 seconds of access-token expiry. Protected requests also
+  attempt renewal when the access token has expired. The check returns `200` with
+  `{ autenticado: true }` for an active session, `401` when sign-in is required,
+  and a retryable `503` on a temporary renewal failure. Its body contains no tokens.
+  `GET /api/auth/sesion` remains a read-only check for already-open pages.
 - This Password Realm contract still requires production hardening. The migration
   requirements are recorded in `docs/authentication-hardening-plan.md`.
 - Tokens must never be written to localStorage, logs, analytics, or URLs.
@@ -144,6 +148,17 @@ requests per hour. Validation returns `valido: true` for a pending, unexpired
 token; invalid, expired, or already-used tokens return `400`. Password change
 accepts only `token` and `nuevaContrasenia` and consumes the token after success.
 The web adds password confirmation locally and never sends it to the backend.
+
+### Authenticated staff profile
+
+`GET /api/staff/me` returns the signed-in account's name, surname, email,
+platform administrator status and memberships. The profile reads the account
+through this endpoint on the server. `PUT /api/staff/account/profile` validates
+`{ nombre, apellido }` and forwards the two trimmed, nonempty fields (up to
+120 characters each) to backend `PUT /api/staff/me` with the session bearer.
+The backend updates the account identified by the bearer subject and returns
+the updated `StaffMeResponse`. The browser receives only the updated names.
+The sign-in email is read-only on this page.
 
 ### Authenticated staff password change
 
@@ -207,6 +222,7 @@ POST /api/recepcion/admisiones/{admisionId}/cancelar
 GET  /api/pacientes/{pacienteId}/obrasocial/credenciales
 POST /api/pacientes/{pacienteId}/obrasocial/credencial
 PUT  /api/pacientes/{pacienteId}/obrasocial/credenciales/{credencialId}
+DELETE /api/pacientes/{pacienteId}/obrasocial/credenciales/{credencialId}
 ```
 
 Rules relevant to the frontend:
@@ -215,10 +231,12 @@ Rules relevant to the frontend:
 - Hospitals are limited to assignments for the authenticated receptionist.
 - DNI is normalized to digits and must contain seven or eight digits.
 - An existing patient is reused by DNI; otherwise the admission request creates a reception-origin patient.
-- The form preloads stored demographics and address from lookup. It displays birth dates as
-  `DD/MM/YYYY` and sends ISO. The date must be before today and no more than 120 calendar years
-  in the past using Argentina's local date. An admission saves the verified values for existing
+- The form preloads stored demographics and address from lookup. The birth date picker shows
+  `DD/MM/AAAA` with a Spanish calendar and sends ISO. The date must be before today and no more than 120 calendar
+  years in the past using Argentina's local date. An admission saves the verified values for existing
   patients too. Contact email and postal code are optional and can be cleared explicitly.
+- The reception form requires either `FEMENINO` or `MASCULINO`. Existing patients with a saved
+  `X` have an empty gender field until reception selects one of the available values.
 - The address form displays «Barrio» for Ciudad Autónoma de Buenos Aires and «Localidad» for
   other provinces. Both use the API field `ciudad`.
 - A patient cannot have another active consultation.
@@ -226,18 +244,23 @@ Rules relevant to the frontend:
   DNI search when there is an active attention. If creation returns a conflict, the web
   checks lookup again to surface the latest attention state.
 - Specialty starts blank for every admission and must belong to the session hospital.
-- After admission creation, reception can add or edit a credential and choose which one
-  applies. The web sends `{ credencialId }` to the admission coverage endpoint, using `null`
-  for no coverage. `coberturaConfirmada` and `cobertura` from the admission list distinguish
-  a pending choice from a confirmed choice on resume. Coverage data is not persisted in
-  browser storage.
-- A credential requires `nombreObraSocial`, a 6-20 digit `numeroAfiliado`, an
-  alphanumeric `plan`, and a `fechaVencimiento` in ISO date format. In reception, expiration
-  must be after today for creation, edits, and selection. The UI displays `DD/MM/YYYY`.
-- The receptionist completes one structured clinical form. `motivoConsulta` is
-  the required patient-language main complaint; `sintomas` contains only
-  optional additional symptoms. Pain is a repeatable `dolores` list with one
-  location and 0-10 intensity per entry.
+- After admission creation, reception can add, edit or delete a credential and choose which
+  one applies. When exactly one credential is valid and the choice is pending, that credential
+  is preselected. The web sends `{ credencialId }` to the admission coverage endpoint, using
+  `null` for no coverage. `coberturaConfirmada` and `cobertura` restore the confirmed choice
+  on resume. After deletion the web refreshes the list and re-evaluates the working selection.
+  Coverage data is not persisted in browser storage.
+- A credential requires `nombreObraSocial`, a 6-20 digit `numeroAfiliado`, the plan name
+  or code (`plan`, up to 255 characters, including accents and punctuation used in plan
+  names), and a `fechaVencimiento` in ISO date format. Reception offers plans by provider
+  and allows an unlisted plan printed on the credential. The expiration field accepts a
+  month and year (`MM/AAAA`). The web submits the month's last day, which must
+  be after today's date in Argentina for creation, edits, and selection.
+- The receptionist records the main complaint, onset and evolution, then adds any
+  other reported symptoms or relevant context. The web sends `dolores: []` for
+  contract compatibility and omits the optional `fiebre` and `signosAlarma` fields.
+  A legacy draft restores its recorded pain, affirmative fever and alarm signs
+  in the editable additional symptoms field.
 - The backend generates priority; reception cannot submit or modify it.
 - Open admissions can be listed, resumed from their metadata, or cancelled.
 - Finalized and cancelled admissions are terminal.

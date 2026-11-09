@@ -3,19 +3,23 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
+import { DatePicker } from "@/components/date-picker";
 import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
+import { SearchableCombobox } from "@/components/searchable-combobox";
 import { apiClient } from "@/lib/api/client";
 import type {
   CreatePatientCredential,
   PatientCredential,
 } from "@/lib/api/types";
-import { fechaIsoALocal, fechaLocalAIso, hoyIso } from "./date-format";
+import { claveObraSocial, obrasSociales, planesDeObraSocial } from "./coverage-plans";
+import { hoyIso } from "@/lib/argentina-date";
+import { mesDeVencimiento, mesVencimientoMinimo, vencimientoMesAIso } from "./date-format";
 
 const receptionApi = "/api/staff/reception";
-const healthProviders = ["OSDE", "Swiss Medical", "Galeno", "Medifé", "IOMA"];
-const healthPlans = ["210", "220", "310", "410", "Plan Único"];
+const otroPlan = "__otro__";
+const obrasSocialesOptions = obrasSociales.map(({ nombre }) => nombre);
 
 const credentialSchema = z.object({
   nombreObraSocial: z
@@ -32,11 +36,12 @@ const credentialSchema = z.object({
     .string()
     .trim()
     .min(1, "Ingresá el plan.")
-    .regex(/^[A-Za-z0-9 ]+$/, "Usá solo letras, números y espacios."),
+    .max(255, "El plan no puede superar los 255 caracteres.")
+    .regex(/^[\p{L}\p{M}\p{N} .+()\/-]+$/u, "Usá el nombre o código que figura en la credencial."),
   fechaVencimiento: z
     .string()
-    .transform(fechaLocalAIso)
-    .pipe(z.string("Ingresá una fecha válida en formato dd/mm/aaaa."))
+    .transform(vencimientoMesAIso)
+    .pipe(z.string("Seleccioná el mes y el año de vencimiento."))
     .refine((fecha) => fecha > hoyIso(), "El vencimiento debe ser posterior a hoy."),
 });
 
@@ -50,13 +55,16 @@ const emptyCredential: CredentialForm = {
 };
 
 function credentialIsCurrent(credential: PatientCredential, today: string) {
-  return Boolean(credential.fechaVencimiento && credential.fechaVencimiento > today);
+  const expiration = vencimientoMesAIso(mesDeVencimiento(credential.fechaVencimiento));
+  return expiration !== null && expiration > today;
 }
 
 function CredentialCard({ credential, preview = false }: {
   credential: Partial<PatientCredential & CreatePatientCredential>;
   preview?: boolean;
 }) {
+  const [anio, mes] = mesDeVencimiento(credential.fechaVencimiento).split("-");
+
   return (
     <article className={`credential-card${preview ? " credential-card-preview" : ""}`}>
       <div className="credential-card-orb" aria-hidden="true" />
@@ -71,7 +79,7 @@ function CredentialCard({ credential, preview = false }: {
       </div>
       <div className="credential-card-details">
         <div><span>Plan</span><strong>{credential.plan || "—"}</strong></div>
-        <div><span>Vencimiento</span><strong>{fechaIsoALocal(credential.fechaVencimiento) || "dd/mm/aaaa"}</strong></div>
+        <div><span>Vencimiento</span><strong>{mes ? `${mes}/${anio}` : "mm/aaaa"}</strong></div>
       </div>
     </article>
   );
@@ -99,8 +107,9 @@ export function ReceptionCoverageStep({
   isContinuing?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const [selectedCredentialId, setSelectedCredentialId] = useState(initialCredentialId ?? null);
+  const [credentialChoice, setCredentialChoice] = useState(initialCredentialId);
   const [editingCredentialId, setEditingCredentialId] = useState<number | null>(null);
+  const [planPersonalizado, setPlanPersonalizado] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState(false);
   const form = useForm<z.input<typeof credentialSchema>, unknown, CredentialForm>({
@@ -108,6 +117,7 @@ export function ReceptionCoverageStep({
     defaultValues: emptyCredential,
   });
   const preview = useWatch({ control: form.control });
+  const planesDisponibles = planesDeObraSocial(preview.nombreObraSocial);
   const credentialsKey = ["reception", "patient-credentials", patientId];
   const credentialsQuery = useQuery({
     queryKey: credentialsKey,
@@ -123,42 +133,77 @@ export function ReceptionCoverageStep({
     onSuccess: async (_, { credentialId }) => {
       await queryClient.invalidateQueries({ queryKey: credentialsKey });
       setEditingCredentialId(null);
+      setPlanPersonalizado(false);
       form.reset(emptyCredential);
       setSavedMessage(credentialId === null ? "Credencial guardada correctamente." : "Credencial actualizada correctamente.");
     },
   });
+  const deleteCredential = useMutation({
+    mutationFn: (credentialId: number) =>
+      apiClient(receptionApi, "deletePatientCredential", { patientId, credentialId }),
+    onSuccess: async (_, credentialId) => {
+      setCredentialChoice((current) => current === credentialId ? undefined : current);
+      queryClient.setQueryData<PatientCredential[]>(credentialsKey, (current) =>
+        current?.filter((credential) => credential.id !== credentialId),
+      );
+      await queryClient.invalidateQueries({ queryKey: credentialsKey });
+      setEditingCredentialId(null);
+      setPlanPersonalizado(false);
+      setSelectionError(false);
+      form.reset(emptyCredential);
+      setSavedMessage("Credencial eliminada.");
+    },
+  });
   const today = hoyIso();
-  const pending = isCancelling || isContinuing || saveCredential.isPending;
+  const pending = isCancelling || isContinuing || saveCredential.isPending || deleteCredential.isPending;
   const credentials = credentialsQuery.data ?? [];
+  const currentCredentials = credentials.filter((credential) =>
+    typeof credential.id === "number" && credentialIsCurrent(credential, today),
+  );
+  const selectedCredentialId = credentialChoice === undefined && credentialsQuery.isSuccess && currentCredentials.length <= 1
+    ? currentCredentials[0]?.id ?? null
+    : credentialChoice;
   const selectedCredential = credentials.find((credential) => credential.id === selectedCredentialId);
-  const selectedUnavailable = selectedCredentialId !== null && !credentialsQuery.isPending &&
+  const selectedUnavailable = typeof selectedCredentialId === "number" && !credentialsQuery.isPending &&
     (!selectedCredential || !credentialIsCurrent(selectedCredential, today));
 
   function selectCredential(credentialId: number | null) {
-    setSelectedCredentialId(credentialId);
+    setCredentialChoice(credentialId);
     setSelectionError(false);
   }
 
   function editCredential(credential: PatientCredential, id: number) {
     setEditingCredentialId(id);
+    setPlanPersonalizado(Boolean(credential.plan && !planesDeObraSocial(credential.nombreObraSocial).includes(credential.plan)));
     setSavedMessage(null);
     saveCredential.reset();
+    deleteCredential.reset();
     form.reset({
       nombreObraSocial: credential.nombreObraSocial ?? "",
       numeroAfiliado: credential.numeroAfiliado ?? "",
       plan: credential.plan ?? "",
-      fechaVencimiento: fechaIsoALocal(credential.fechaVencimiento ?? ""),
+      fechaVencimiento: mesDeVencimiento(credential.fechaVencimiento),
     });
     requestAnimationFrame(() => form.setFocus("nombreObraSocial"));
   }
 
   function cancelEdit() {
     setEditingCredentialId(null);
+    setPlanPersonalizado(false);
     saveCredential.reset();
+    deleteCredential.reset();
     form.reset(emptyCredential);
   }
 
+  function confirmDeleteCredential() {
+    if (editingCredentialId === null || pending || !window.confirm("¿Querés eliminar esta credencial del paciente?")) return;
+    setSavedMessage(null);
+    saveCredential.reset();
+    deleteCredential.mutate(editingCredentialId);
+  }
+
   function continueToTriage() {
+    if (selectedCredentialId === undefined) return;
     if (selectedCredentialId !== null && (!selectedCredential || !credentialIsCurrent(selectedCredential, hoyIso()))) {
       setSelectionError(true);
       return;
@@ -179,7 +224,7 @@ export function ReceptionCoverageStep({
 
       <section className="coverage-existing" aria-labelledby="existing-credentials-title">
         <div className="panel-heading">
-          <div><h2 id="existing-credentials-title">Cobertura de esta atención</h2><p>Podés usar una credencial vigente, actualizarla o cargar otra.</p></div>
+          <div><h2 id="existing-credentials-title">Cobertura de esta atención</h2><p>Elegí una credencial vigente o seleccioná «Sin cobertura».</p></div>
           {credentials.length > 0 ? <span className="coverage-count">{credentials.length}</span> : null}
         </div>
         <fieldset className="coverage-options" aria-labelledby="existing-credentials-title" disabled={pending}>
@@ -227,56 +272,121 @@ export function ReceptionCoverageStep({
       <section className="coverage-layout">
         <div className="credential-preview-wrap">
           <p className="eyebrow">Así se verá</p>
-          <CredentialCard credential={{ ...preview, fechaVencimiento: fechaLocalAIso(preview.fechaVencimiento ?? "") ?? undefined }} preview />
+          <CredentialCard credential={{ ...preview, fechaVencimiento: vencimientoMesAIso(preview.fechaVencimiento ?? "") ?? undefined }} preview />
           <p className="credential-preview-help">La vista previa se actualiza mientras completás los datos.</p>
         </div>
 
         <form
           className="panel form-panel coverage-form"
+          noValidate
           onSubmit={form.handleSubmit((values) => {
             if (pending) return;
             setSavedMessage(null);
+            deleteCredential.reset();
             saveCredential.mutate({ credentialId: editingCredentialId, credential: values });
           })}
         >
           <div className="panel-heading"><h2>{editingCredentialId === null ? "Nueva credencial" : "Editar credencial"}</h2></div>
           <RequiredFieldsNote />
           <fieldset className="form-grid coverage-form-fields" disabled={pending}>
-            <label className="field field-wide">
-              <RequiredLabel>Obra social o prepaga</RequiredLabel>
-              <input aria-required="true" autoComplete="off" list="health-provider-options" placeholder="Ej. OSDE" {...form.register("nombreObraSocial")} />
-              <datalist id="health-provider-options">{healthProviders.map((provider) => <option key={provider} value={provider} />)}</datalist>
-              {form.formState.errors.nombreObraSocial ? <small className="field-error">{form.formState.errors.nombreObraSocial.message}</small> : null}
-            </label>
+            <div className="field field-wide">
+              <label htmlFor="coverage-provider"><RequiredLabel>Obra social o prepaga</RequiredLabel></label>
+              <Controller control={form.control} name="nombreObraSocial" render={({ field, fieldState }) => (
+                <SearchableCombobox
+                  {...field}
+                  id="coverage-provider"
+                  options={obrasSocialesOptions}
+                  allowCustomValue
+                  aria-required="true"
+                  aria-invalid={fieldState.invalid}
+                  aria-describedby={fieldState.error ? "coverage-provider-error" : undefined}
+                  placeholder="Ej. OSDE"
+                  onChange={(nombre) => {
+                    if (claveObraSocial(nombre) !== claveObraSocial(field.value)) {
+                      setPlanPersonalizado(false);
+                      form.setValue("plan", "", { shouldDirty: true });
+                    }
+                    field.onChange(nombre);
+                  }}
+                />
+              )} />
+              {form.formState.errors.nombreObraSocial ? <small className="field-error" id="coverage-provider-error">{form.formState.errors.nombreObraSocial.message}</small> : null}
+            </div>
             <label className="field field-wide">
               <RequiredLabel>N.º de afiliado</RequiredLabel>
               <input aria-required="true" inputMode="numeric" placeholder="Solo números" {...form.register("numeroAfiliado")} />
               {form.formState.errors.numeroAfiliado ? <small className="field-error">{form.formState.errors.numeroAfiliado.message}</small> : null}
             </label>
-            <label className="field">
-              <RequiredLabel>Plan</RequiredLabel>
-              <input aria-required="true" autoComplete="off" list="health-plan-options" placeholder="Ej. 310" {...form.register("plan")} />
-              <datalist id="health-plan-options">{healthPlans.map((plan) => <option key={plan} value={plan} />)}</datalist>
-              {form.formState.errors.plan ? <small className="field-error">{form.formState.errors.plan.message}</small> : null}
-            </label>
-            <label className="field">
-              <RequiredLabel>Vencimiento</RequiredLabel>
-              <input
-                aria-required="true"
-                aria-invalid={Boolean(form.formState.errors.fechaVencimiento)}
-                aria-describedby={form.formState.errors.fechaVencimiento ? "credential-expiration-error" : undefined}
-                type="text"
-                maxLength={10}
-                placeholder="dd/mm/aaaa"
-                {...form.register("fechaVencimiento")}
+            <Controller control={form.control} name="plan" render={({ field, fieldState }) => (
+              <div className="field">
+                {planesDisponibles.length ? (
+                  <div className="field">
+                    <label htmlFor="coverage-plan"><RequiredLabel>Plan</RequiredLabel></label>
+                    <SearchableCombobox
+                      id="coverage-plan"
+                      name={planPersonalizado ? undefined : field.name}
+                      ref={planPersonalizado ? undefined : field.ref}
+                      value={planPersonalizado ? otroPlan : field.value}
+                      options={[...planesDisponibles, { value: otroPlan, label: "Otro plan de la credencial" }]}
+                      placeholder="Seleccioná un plan"
+                      onBlur={field.onBlur}
+                      aria-required="true"
+                      aria-invalid={fieldState.invalid && !planPersonalizado}
+                      aria-describedby={fieldState.error && !planPersonalizado ? "coverage-plan-error" : undefined}
+                      onChange={(plan) => {
+                        setPlanPersonalizado(plan === otroPlan);
+                        field.onChange(plan === otroPlan ? "" : plan);
+                      }}
+                    />
+                  </div>
+                ) : null}
+                {!planesDisponibles.length || planPersonalizado ? (
+                  <label className="field">
+                    <RequiredLabel>{planPersonalizado ? "Plan de la credencial" : "Plan"}</RequiredLabel>
+                    <input
+                      {...field}
+                      aria-required="true"
+                      aria-invalid={fieldState.invalid}
+                      aria-describedby={fieldState.error ? "coverage-plan-error" : undefined}
+                      autoComplete="off"
+                      placeholder="Tal como figura en la credencial"
+                    />
+                  </label>
+                ) : null}
+                {fieldState.error ? <small className="field-error" id="coverage-plan-error">{fieldState.error.message}</small> : null}
+              </div>
+            )} />
+            <div className="field">
+              <label htmlFor="coverage-expiration"><RequiredLabel>Vencimiento</RequiredLabel></label>
+              <Controller
+                control={form.control}
+                name="fechaVencimiento"
+                render={({ field, fieldState }) => (
+                  <DatePicker
+                    {...field}
+                    id="coverage-expiration"
+                    mode="month"
+                    min={mesVencimientoMinimo(today)}
+                    disabled={pending}
+                    required
+                    aria-invalid={fieldState.invalid}
+                    aria-describedby={fieldState.error ? "credential-expiration-error" : undefined}
+                  />
+                )}
               />
               {form.formState.errors.fechaVencimiento ? <small className="field-error" id="credential-expiration-error">{form.formState.errors.fechaVencimiento.message}</small> : null}
-            </label>
+            </div>
           </fieldset>
           {savedMessage ? <div className="notice notice-success" role="status">{savedMessage}</div> : null}
           {saveCredential.error ? <div className="notice notice-error" role="alert">{messageFrom(saveCredential.error)}</div> : null}
+          {deleteCredential.error ? <div className="notice notice-error" role="alert">{messageFrom(deleteCredential.error)}</div> : null}
           <div className="form-actions">
-            {editingCredentialId !== null ? <button className="button button-secondary" disabled={pending} type="button" onClick={cancelEdit}>Cancelar edición</button> : null}
+            {editingCredentialId !== null ? <>
+              <button className="button button-danger-ghost" disabled={pending} type="button" onClick={confirmDeleteCredential}>
+                {deleteCredential.isPending ? "Eliminando…" : "Eliminar credencial"}
+              </button>
+              <button className="button button-secondary" disabled={pending} type="button" onClick={cancelEdit}>Cancelar edición</button>
+            </> : null}
             <button className="button button-primary button-wide" disabled={pending} type="submit">
               {saveCredential.isPending ? "Guardando…" : editingCredentialId === null ? "Guardar credencial" : "Guardar cambios"}
             </button>
@@ -288,7 +398,7 @@ export function ReceptionCoverageStep({
         <button className="button button-danger-ghost" disabled={pending} type="button" onClick={onCancel}>
           {isCancelling ? "Cancelando…" : "Cancelar admisión"}
         </button>
-        <button className="button button-primary" disabled={pending || editingCredentialId !== null || selectedUnavailable || (selectedCredentialId !== null && credentialsQuery.isPending)} type="button" onClick={continueToTriage}>
+        <button className="button button-primary" disabled={pending || editingCredentialId !== null || selectedCredentialId === undefined || selectedUnavailable || (selectedCredentialId !== null && credentialsQuery.isPending)} type="button" onClick={continueToTriage}>
           {isContinuing ? "Guardando cobertura…" : "Continuar al pretriage"}
         </button>
       </div>

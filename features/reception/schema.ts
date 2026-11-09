@@ -1,15 +1,7 @@
 import { z } from "zod";
 import type { ReceptionTriageForm } from "@/lib/api/types";
-import { fechaLocalAIso, hoyIso } from "./date-format";
-
-const EDAD_MAXIMA = 120;
-
-function fechaNacimientoMinima(hoy: string) {
-  const [anio, mes, dia] = hoy.split("-");
-  const anioMinimo = Number(anio) - EDAD_MAXIMA;
-  const ultimoDiaMes = new Date(Date.UTC(anioMinimo, Number(mes), 0)).getUTCDate();
-  return `${anioMinimo}-${mes}-${String(Math.min(Number(dia), ultimoDiaMes)).padStart(2, "0")}`;
-}
+import { fechaIsoValida } from "@/lib/argentina-date";
+import { EDAD_MAXIMA_NACIMIENTO, rangoFechaNacimiento } from "./date-format";
 
 export const dniSchema = z.object({
   dni: z
@@ -23,13 +15,12 @@ export const patientSchema = z.object({
   nombre: z.string().trim().min(1, "Ingresá el nombre."),
   apellido: z.string().trim().min(1, "Ingresá el apellido."),
   fechaNacimiento: z.string()
-    .transform(fechaLocalAIso)
-    .pipe(z.string("Ingresá una fecha válida en formato dd/mm/aaaa."))
+    .refine(fechaIsoValida, "Seleccioná una fecha de nacimiento válida.")
     .refine((fecha) => {
-      const hoy = hoyIso();
-      return fecha >= fechaNacimientoMinima(hoy) && fecha < hoy;
-    }, `La fecha debe ser anterior a hoy y corresponder a una edad de hasta ${EDAD_MAXIMA} años.`),
-  generoBiologico: z.string().pipe(z.enum(["MASCULINO", "FEMENINO", "X"], "Seleccioná el género biológico.")),
+      const { min, max } = rangoFechaNacimiento();
+      return fecha >= min && fecha <= max;
+    }, `La fecha debe ser anterior a hoy y corresponder a una edad de hasta ${EDAD_MAXIMA_NACIMIENTO} años.`),
+  generoBiologico: z.string().pipe(z.enum(["MASCULINO", "FEMENINO"], "Seleccioná el género biológico.")),
   telefono: z
     .string()
     .trim()
@@ -50,22 +41,28 @@ export const patientSchema = z.object({
 export type PatientFormValues = z.input<typeof patientSchema>;
 export type PatientAdmissionValues = z.output<typeof patientSchema>;
 
-export const clinicalSchema = z.object({
-  motivoConsulta: z.string().trim().min(3, "Describí el motivo principal."),
+const clinicalFields = z.object({
+  motivoConsulta: z.string(),
   sintomas: z.string(),
-  inicio: z.string().trim().min(1, "Indicá cuándo comenzó."),
-  evolucion: z.string().trim().min(1, "Indicá cómo evolucionó."),
-  dolores: z.array(z.object({
-    localizacion: z.string().trim().min(1, "Indicá dónde duele."),
-    intensidad: z.string().regex(/^(?:[0-9]|10)$/, "Ingresá un valor entre 0 y 10."),
-  })),
-  fiebre: z.boolean(),
-  signosAlarma: z.string(),
+  inicio: z.string(),
+  evolucion: z.string(),
   antecedentesRelevantes: z.string(),
   medicamentos: z.string(),
   alergias: z.string(),
   posibilidadEmbarazo: z.string(),
   observaciones: z.string(),
+});
+
+export const clinicalSchema = clinicalFields.extend({
+  motivoConsulta: z.string().trim().min(3, "Describí el motivo principal."),
+  inicio: z.string().trim().min(1, "Indicá cuándo comenzó."),
+  evolucion: z.string().trim().min(1, "Indicá cómo evolucionó."),
+});
+
+const clinicalDraftSchema = clinicalFields.partial().extend({
+  fiebre: z.boolean().optional(),
+  signosAlarma: z.string().optional(),
+  dolores: z.array(z.object({ localizacion: z.string(), intensidad: z.string() })).optional(),
 });
 
 export type ClinicalFormValues = z.infer<typeof clinicalSchema>;
@@ -75,9 +72,6 @@ export const emptyClinicalForm: ClinicalFormValues = {
   sintomas: "",
   inicio: "",
   evolucion: "",
-  dolores: [],
-  fiebre: false,
-  signosAlarma: "",
   antecedentesRelevantes: "",
   medicamentos: "",
   alergias: "",
@@ -85,11 +79,39 @@ export const emptyClinicalForm: ClinicalFormValues = {
   observaciones: "",
 };
 
-function list(value: string) {
+function list(value: string, separator = /[,\n]+/) {
   return value
-    .split(",")
+    .split(separator)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+export function restoreClinicalDraft(value: unknown): ClinicalFormValues {
+  const parsed = clinicalDraftSchema.safeParse(value);
+  if (!parsed.success) return emptyClinicalForm;
+
+  const { fiebre, signosAlarma = "", dolores = [], sintomas = "", ...fields } = parsed.data;
+  // Keep previously entered observations visible when reopening a legacy draft.
+  const legacySymptoms = list(signosAlarma);
+  if (fiebre) legacySymptoms.push("Fiebre");
+  for (const dolor of dolores) {
+    const lugar = dolor.localizacion.trim();
+    const intensidad = /^(?:[0-9]|10)$/.test(dolor.intensidad) ? ` (intensidad ${dolor.intensidad}/10)` : "";
+    if (lugar || intensidad) legacySymptoms.push(`Dolor${lugar ? ` en ${lugar}` : ""}${intensidad}`);
+  }
+  const reported = new Set(list(sintomas).map((item) => item.toLocaleLowerCase("es-AR")));
+  const migrated = legacySymptoms.filter((item) => {
+    const key = item.toLocaleLowerCase("es-AR");
+    if (reported.has(key)) return false;
+    reported.add(key);
+    return true;
+  });
+
+  return {
+    ...emptyClinicalForm,
+    ...fields,
+    sintomas: migrated.length ? [sintomas.trim(), ...migrated].filter(Boolean).join("\n") : sintomas,
+  };
 }
 
 export function toTriageRequest(
@@ -97,15 +119,10 @@ export function toTriageRequest(
 ): ReceptionTriageForm {
   return {
     motivoConsulta: values.motivoConsulta.trim(),
-    sintomas: list(values.sintomas),
+    sintomas: list(values.sintomas, /\r?\n/),
     inicio: values.inicio.trim(),
     evolucion: values.evolucion.trim(),
-    dolores: values.dolores.map((dolor) => ({
-      localizacion: dolor.localizacion.trim(),
-      intensidad: Number(dolor.intensidad),
-    })),
-    fiebre: values.fiebre,
-    signosAlarma: list(values.signosAlarma),
+    dolores: [],
     antecedentesRelevantes: list(values.antecedentesRelevantes),
     medicamentos: list(values.medicamentos),
     alergias: list(values.alergias),

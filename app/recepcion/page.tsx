@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { ReceptionWorkspace } from "@/features/reception/reception-workspace";
 import { getSession } from "@/lib/session";
-import { getStaffContext } from "@/lib/staff-context";
+import { getStaffContext, staffDisplayName } from "@/lib/staff-context";
 import { hasMultipleHospitals } from "@/lib/workspace-routing";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ export default async function ReceptionPage({
 
   return (
     <ReceptionWorkspace
-      userName={session.user.name ?? session.user.email ?? "Recepcionista"}
+      userName={staffDisplayName(context, session.user, "Recepcionista")}
       hospitalId={membership.hospitalId}
       hospitalName={membership.hospitalNombre}
       roles={membership.roles}

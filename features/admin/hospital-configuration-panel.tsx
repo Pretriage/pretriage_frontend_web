@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
+import { SearchableCombobox } from "@/components/searchable-combobox";
+import { formatoFechaHoraArgentina } from "@/lib/argentina-date";
 import styles from "./hospital-configuration-panel.module.css";
 import type { ConfigurationOperation, HospitalConfiguration, MedicalSession, Room, Sector, Specialty } from "./hospital-configuration";
 
@@ -69,7 +71,7 @@ function SectorSessions({ hospitalId, sector, load, close, refreshAfterClose }: 
     {sessionsQuery.error ? <p className="notice notice-error" role="alert">{sessionsQuery.error.message}</p> : null}
     {sessionsQuery.data?.length === 0 ? <p className="notice notice-info">Este sector no tiene sesiones activas o pausadas.</p> : null}
     {sessionsQuery.data?.map((session) => <div className="record-row" key={session.id}>
-      <div><strong>{session.medicoNombre}</strong><span>{session.salaNombre ?? "Sin consultorio"} · {session.nombreEspecialidad} · {session.estado} · Inicio {new Date(session.fechaHoraInicio).toLocaleString("es-AR")}</span></div>
+      <div><strong>{session.medicoNombre}</strong><span>{session.salaNombre ?? "Sin consultorio"} · {session.nombreEspecialidad} · {session.estado} · Inicio {formatoFechaHoraArgentina(session.fechaHoraInicio)}</span></div>
       {session.estado !== "FINALIZADA" ? <button
         className="button button-danger-ghost"
         type="button"
@@ -110,17 +112,62 @@ function NameField({ name, label, value, disabled }: { name: string; label: stri
   return <label className="field"><RequiredLabel>{label}</RequiredLabel><input name={name} defaultValue={value} required maxLength={100} disabled={disabled} onInput={(event) => event.currentTarget.setCustomValidity("")} /></label>;
 }
 
-function SpecialtyField({ specialties, value, disabled }: { specialties: Specialty[]; value?: number; disabled: boolean }) {
+type ConfigurationFieldProps = {
+  name: string;
+  label: string;
+  placeholder: string;
+  initialValue?: string;
+  options: readonly { value: string; label: string; disabled?: boolean }[];
+  disabled: boolean;
+  inputRef?: RefObject<HTMLInputElement | null>;
+};
+
+function ConfigurationField({ name, label, placeholder, initialValue = "", options, disabled, inputRef }: ConfigurationFieldProps) {
+  const id = useId();
+  const [value, setValue] = useState(initialValue);
   return (
-    <label className="field"><RequiredLabel>Especialidad</RequiredLabel>
-      <select name="specialtyId" defaultValue={value ?? ""} required disabled={disabled} onChange={(event) => event.currentTarget.setCustomValidity("")}>
-        <option value="">Seleccionar especialidad</option>
-        {specialties.filter((item) => item.habilitada || item.id === value).map((item) => (
-          <option value={item.id} key={item.id} disabled={!item.habilitada}>{item.nombre}{item.habilitada ? "" : " (no habilitada)"}</option>
-        ))}
-      </select>
-    </label>
+    <div className="field">
+      <label htmlFor={id}><RequiredLabel>{label}</RequiredLabel></label>
+      <SearchableCombobox
+        id={id}
+        name={name}
+        ref={inputRef}
+        required
+        disabled={disabled}
+        value={value}
+        placeholder={placeholder}
+        options={options}
+        onChange={setValue}
+      />
+    </div>
   );
+}
+
+function SpecialtyField({ specialties, value, disabled, inputRef }: { specialties: Specialty[]; value?: number; disabled: boolean; inputRef: RefObject<HTMLInputElement | null> }) {
+  return (
+    <ConfigurationField
+      name="specialtyId"
+      label="Especialidad"
+      placeholder="Seleccioná una especialidad"
+      initialValue={specialties.some((item) => item.id === value) ? String(value) : ""}
+      disabled={disabled}
+      inputRef={inputRef}
+      options={specialties.filter((item) => item.habilitada || item.id === value).map((item) => ({
+        value: String(item.id),
+        label: item.habilitada ? item.nombre : `${item.nombre} (no habilitada)`,
+        disabled: !item.habilitada,
+      }))}
+    />
+  );
+}
+
+function enabledSpecialtyFrom(data: FormData, specialties: Specialty[], input: HTMLInputElement | null) {
+  const specialty = specialties.find((item) => item.id === Number(data.get("specialtyId")) && item.habilitada);
+  if (!specialty && input) {
+    input.setCustomValidity("Elegí una especialidad habilitada.");
+    input.reportValidity();
+  }
+  return specialty;
 }
 
 function RoomForm({ room, sector, pending, specialtyEnabled, configure }: { room?: Room; sector: Sector; pending: boolean; specialtyEnabled: boolean; configure: Configure }) {
@@ -155,6 +202,7 @@ function RoomForm({ room, sector, pending, specialtyEnabled, configure }: { room
 
 function SectorCard({ hospitalId, sector, rooms, specialties, pending, configure, loadSectorSessions, closeMedicalSession, refreshAfterSessionClose }: { hospitalId: number; sector: Sector; rooms: Room[]; specialties: Specialty[]; pending: boolean; configure: Configure; loadSectorSessions: SectorSessionsProps["load"]; closeMedicalSession: SectorSessionsProps["close"]; refreshAfterSessionClose: SectorSessionsProps["refreshAfterClose"] }) {
   const specialtyEnabled = specialties.some((item) => item.id === sector.especialidadId && item.habilitada);
+  const specialtyInput = useRef<HTMLInputElement>(null);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -163,8 +211,10 @@ function SectorCard({ hospitalId, sector, rooms, specialties, pending, configure
     const nombre = nameFrom(form, "sectorName");
     if (!nombre) return;
     const data = new FormData(form);
+    const specialty = enabledSpecialtyFrom(data, specialties, specialtyInput.current);
+    if (!specialty) return;
     configure({ operation: "updateSector", sectorId: sector.id, sector: {
-      nombre, especialidadId: Number(data.get("specialtyId")), activa: data.get("active") === "true",
+      nombre, especialidadId: specialty.id, activa: data.get("active") === "true",
     } });
   }
 
@@ -184,8 +234,15 @@ function SectorCard({ hospitalId, sector, rooms, specialties, pending, configure
       <form className="form-panel" onSubmit={submit} aria-label={`Editar sector ${sector.nombre}`} key={`${sector.nombre}:${sector.especialidadId}:${sector.activa}`}>
         <div className="form-grid">
           <NameField name="sectorName" label="Nombre del sector" value={sector.nombre} disabled={pending} />
-          <SpecialtyField specialties={specialties} value={sector.especialidadId} disabled={pending} />
-          <label className="field"><RequiredLabel>Estado</RequiredLabel><select name="active" defaultValue={String(sector.activa)} required disabled={pending}><option value="true">Activo</option><option value="false">Inactivo</option></select></label>
+          <SpecialtyField specialties={specialties} value={sector.especialidadId} disabled={pending} inputRef={specialtyInput} />
+          <ConfigurationField
+            name="active"
+            label="Estado"
+            placeholder="Seleccioná un estado"
+            initialValue={String(sector.activa)}
+            options={[{ value: "true", label: "Activo" }, { value: "false", label: "Inactivo" }]}
+            disabled={pending}
+          />
         </div>
         <p className="notice notice-info">Al guardar un sector inactivo, también se desactivan sus salas. Reactivarlo no vuelve a activar las salas automáticamente.</p>
         {!specialtyEnabled ? <p className="notice notice-warning">Habilitá la especialidad o elegí otra habilitada antes de guardar el sector.</p> : null}
@@ -218,8 +275,11 @@ export function HospitalConfigurationPanel({ hospitalId, configuration, pending,
   const [confirmationBusy, setConfirmationBusy] = useState(false);
   const [confirmationError, setConfirmationError] = useState<Error | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [createSpecialtyVersion, setCreateSpecialtyVersion] = useState(0);
   const confirmationDialogRef = useRef<HTMLDialogElement>(null);
   const createFormRef = useRef<HTMLFormElement>(null);
+  const createSpecialtyInput = useRef<HTMLInputElement>(null);
+  const disableSpecialtyInput = useRef<HTMLInputElement>(null);
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const confirmationTriggerRef = useRef<HTMLButtonElement | null>(null);
   const confirmationBusyRef = useRef(false);
@@ -271,7 +331,10 @@ export function HospitalConfigurationPanel({ hospitalId, configuration, pending,
         ? { operation: "createSector", sector: { nombre: confirmation.nombre, especialidadId: confirmation.especialidadId } }
         : { operation: "enableSpecialty", specialtyId: confirmation.especialidadId },
       () => {
-        if (confirmation.kind === "sector") createFormRef.current?.reset();
+        if (confirmation.kind === "sector") {
+          createFormRef.current?.reset();
+          setCreateSpecialtyVersion((version) => version + 1);
+        }
         setConfirmation(null);
         setConfirmationError(null);
         setConfirmationBusy(false);
@@ -293,19 +356,13 @@ export function HospitalConfigurationPanel({ hospitalId, configuration, pending,
     const form = event.currentTarget;
     const nombre = nameFrom(form, "sectorName");
     if (!nombre) return;
-    const especialidadId = Number(new FormData(form).get("specialtyId"));
-    const specialty = specialties.find((item) => item.id === especialidadId);
-    if (!specialty?.habilitada) {
-      const select = form.elements.namedItem("specialtyId") as HTMLSelectElement;
-      select.setCustomValidity("Elegí una especialidad habilitada.");
-      select.reportValidity();
-      return;
-    }
+    const specialty = enabledSpecialtyFrom(new FormData(form), specialties, createSpecialtyInput.current);
+    if (!specialty) return;
     createFormRef.current = form;
     setConfirmationError(null);
     setSuccessMessage(null);
     confirmationTriggerRef.current = createButtonRef.current;
-    setConfirmation({ kind: "sector", nombre, especialidadId, especialidadNombre: specialty.nombre });
+    setConfirmation({ kind: "sector", nombre, especialidadId: specialty.id, especialidadNombre: specialty.nombre });
   }
 
   function enableSpecialty(specialty: Specialty, trigger: HTMLButtonElement) {
@@ -320,7 +377,8 @@ export function HospitalConfigurationPanel({ hospitalId, configuration, pending,
     event.preventDefault();
     if (disabled) return;
     const form = new FormData(event.currentTarget);
-    configure({ operation: "disableSpecialty", specialtyId: Number(form.get("specialtyId")) });
+    const specialty = enabledSpecialtyFrom(form, specialties, disableSpecialtyInput.current);
+    if (specialty) configure({ operation: "disableSpecialty", specialtyId: specialty.id });
   }
 
   return (
@@ -341,7 +399,7 @@ export function HospitalConfigurationPanel({ hospitalId, configuration, pending,
           <form className="form-panel admin-room" onSubmit={disableSpecialty} aria-label="Deshabilitar especialidad">
             <p className="notice notice-info">La especialidad dejará de ofrecerse en este hospital. Primero desactivá sus salas en todos los sectores. Podés volver a habilitarla más adelante.</p>
             <div className="form-grid">
-              <SpecialtyField specialties={specialties} disabled={disabled} />
+              <SpecialtyField specialties={specialties} disabled={disabled} inputRef={disableSpecialtyInput} />
             </div>
             <button className="button button-danger-ghost" type="submit" disabled={disabled}>Deshabilitar especialidad</button>
           </form>
@@ -351,7 +409,7 @@ export function HospitalConfigurationPanel({ hospitalId, configuration, pending,
         <h3>Agregar sector</h3>
         <div className="form-grid">
           <NameField name="sectorName" label="Nombre del sector" disabled={disabled || enabled.length === 0} />
-          <SpecialtyField specialties={specialties} disabled={disabled || enabled.length === 0} />
+          <SpecialtyField key={createSpecialtyVersion} specialties={specialties} disabled={disabled || enabled.length === 0} inputRef={createSpecialtyInput} />
         </div>
         {enabled.length === 0 && !unavailable ? <p className="notice notice-info">Habilitá una especialidad para crear el primer sector.</p> : null}
         <button ref={createButtonRef} className="button button-primary" type="submit" disabled={disabled || enabled.length === 0}>Crear sector</button>

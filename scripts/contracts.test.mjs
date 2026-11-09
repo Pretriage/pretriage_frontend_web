@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import vm from "node:vm";
+import { NextRequest, NextResponse } from "next/server.js";
 import ts from "typescript";
 import { z } from "zod";
 
@@ -18,20 +20,73 @@ function loadTypeScript(relativePath, { fetch = globalThis.fetch, require = () =
     fileName: filename,
   }).outputText;
   const exports = {};
-  vm.runInNewContext(output, { exports, fetch, require, Request, Response, Date: DateImplementation }, { filename });
+  vm.runInNewContext(output, {
+    exports, fetch, require, Request, Response, Headers, URL, Buffer, AbortSignal, process, setTimeout, Date: DateImplementation,
+  }, { filename });
   return exports;
 }
 
-test("recepción convierte fechas argentinas a ISO sin aceptar días inexistentes", () => {
-  const { fechaLocalAIso, fechaIsoALocal, hoyIso } = loadTypeScript("features/reception/date-format.ts");
+function loadReceptionDates(DateImplementation = Date) {
+  const argentinaDate = loadTypeScript("lib/argentina-date.ts", { Date: DateImplementation });
+  const receptionDate = loadTypeScript("features/reception/date-format.ts", {
+    Date: DateImplementation,
+    require: (specifier) => specifier === "@/lib/argentina-date" ? argentinaDate : {},
+  });
+  return { argentinaDate, receptionDate };
+}
 
-  assert.equal(fechaIsoALocal("2024-02-29"), "29/02/2024");
-  assert.equal(fechaIsoALocal(null), "");
-  assert.equal(fechaLocalAIso("29/02/2024"), "2024-02-29");
-  assert.equal(fechaLocalAIso("29/02/2023"), null);
-  assert.equal(fechaLocalAIso("31/04/2024"), null);
-  assert.equal(fechaLocalAIso("2024-02-29"), null);
+test("las fechas de la web usan DD/MM/AAAA y el día de Argentina", () => {
+  const { argentinaDate, receptionDate } = loadReceptionDates();
+  const { fechaIsoValida, formatoFechaIso, formatoFechaHoraArgentina, formatoHoraArgentina, hoyIso } = argentinaDate;
+
+  assert.equal(fechaIsoValida("2024-02-29"), true);
+  assert.equal(fechaIsoValida(null), false);
+  assert.equal(fechaIsoValida("2023-02-29"), false);
+  assert.equal(fechaIsoValida("2024-04-31"), false);
+  assert.equal(fechaIsoValida("29/02/2024"), false);
   assert.equal(hoyIso(new Date("2026-11-09T02:30:00Z")), "2026-11-08");
+  assert.equal(formatoFechaIso("2026-07-03"), "03/07/2026");
+  assert.equal(formatoFechaHoraArgentina("2026-11-09T02:30:21Z"), "08/11/2026, 23:30:21");
+  assert.equal(formatoFechaHoraArgentina("2026-11-09T02:30:21"), "09/11/2026, 02:30:21");
+  assert.equal(formatoHoraArgentina("2026-11-09T02:30:21"), "02:30");
+  const { min, max } = receptionDate.rangoFechaNacimiento("2020-02-29");
+  assert.equal(min, "1900-02-28");
+  assert.equal(max, "2020-02-28");
+});
+
+test("recepción ofrece planes publicados por prestador y conserva sus nombres", () => {
+  const { obrasSociales, planesDeObraSocial } = loadTypeScript("features/reception/coverage-plans.ts");
+  const openApi = JSON.parse(fs.readFileSync("contracts/pretriage-openapi.json", "utf8"));
+  const planSchema = openApi.components.schemas.CredencialRequest.properties.plan;
+  const planPattern = new RegExp(planSchema.pattern, "u");
+
+  assert.equal(obrasSociales.length, 16);
+  assert.ok(obrasSociales.every(({ planes }) => planes.length > 0));
+  assert.ok(obrasSociales.flatMap(({ planes }) => planes).every((plan) =>
+    plan.length <= planSchema.maxLength && planPattern.test(plan),
+  ));
+  assert.deepEqual(Array.from(planesDeObraSocial(" osde ")), ["210", "310", "410", "450", "510"]);
+  assert.ok(planesDeObraSocial("medife").includes("Medife+"));
+  assert.ok(planesDeObraSocial("UNION   PERSONAL").includes("UP10"));
+  assert.ok(planesDeObraSocial("Accord Salud").includes("Accord 1.5"));
+  assert.ok(planesDeObraSocial("OSPE").includes("A-401"));
+  assert.deepEqual(Array.from(planesDeObraSocial("IOMA")), ["Cobertura general"]);
+  assert.deepEqual(Array.from(planesDeObraSocial("Otro prestador")), []);
+});
+
+test("recepción envía el último día del mes de vencimiento en ISO", () => {
+  const { vencimientoMesAIso, mesDeVencimiento, mesVencimientoMinimo } = loadReceptionDates().receptionDate;
+
+  assert.equal(vencimientoMesAIso("2028-02"), "2028-02-29");
+  assert.equal(vencimientoMesAIso("2027-02"), "2027-02-28");
+  assert.equal(vencimientoMesAIso("2028-04"), "2028-04-30");
+  assert.equal(vencimientoMesAIso("2028-12"), "2028-12-31");
+  assert.equal(vencimientoMesAIso("2028-13"), null);
+  assert.equal(vencimientoMesAIso("2028-00"), null);
+  assert.equal(mesDeVencimiento("2028-02-05"), "2028-02");
+  assert.equal(mesDeVencimiento(null), "");
+  assert.equal(mesVencimientoMinimo("2028-02-28"), "2028-02");
+  assert.equal(mesVencimientoMinimo("2028-02-29"), "2028-03");
 });
 
 test("recepción exige nacimiento anterior a hoy y admite hasta 120 años", () => {
@@ -40,27 +95,63 @@ test("recepción exige nacimiento anterior a hoy y admite hasta 120 años", () =
       super(...(args.length ? args : ["2026-11-09T02:30:00Z"]));
     }
   }
-  const dateFormat = loadTypeScript("features/reception/date-format.ts", { Date: FixedDate });
+  const { argentinaDate, receptionDate } = loadReceptionDates(FixedDate);
   const { patientSchema } = loadTypeScript("features/reception/schema.ts", {
     require(specifier) {
       if (specifier === "zod") return { z };
-      if (specifier === "./date-format") return dateFormat;
+      if (specifier === "@/lib/argentina-date") return argentinaDate;
+      if (specifier === "./date-format") return receptionDate;
       throw new Error(`Unexpected module: ${specifier}`);
     },
   });
   const patient = {
     dni: "12345678", nombre: "Paciente", apellido: "De prueba",
-    generoBiologico: "X", telefono: "1134567890", correoElectronico: "",
+    generoBiologico: "FEMENINO", telefono: "1134567890", correoElectronico: "",
     calle: "Calle", alturaDomicilio: "100", piso: "", ciudad: "Almagro",
     provincia: "Ciudad Autónoma de Buenos Aires", codigoPostal: "", codigoEspecialidad: "CLINICA_MEDICA",
   };
 
-  assert.equal(patientSchema.parse({ ...patient, fechaNacimiento: "08/11/1906" }).fechaNacimiento, "1906-11-08");
-  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "07/11/1906" }).success, false);
-  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "08/11/1826" }).success, false);
-  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "08/11/2026" }).success, false);
-  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "07/11/2026" }).success, true);
-  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "07/11/2026", generoBiologico: "" }).success, false);
+  assert.equal(patientSchema.parse({ ...patient, fechaNacimiento: "1906-11-08" }).fechaNacimiento, "1906-11-08");
+  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "1906-11-07" }).success, false);
+  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "1826-11-08" }).success, false);
+  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "2026-11-08" }).success, false);
+  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "2026-11-07" }).success, true);
+  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "2026-11-07", generoBiologico: "" }).success, false);
+  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "2026-11-07", generoBiologico: "X" }).success, false);
+  assert.equal(patientSchema.safeParse({ ...patient, fechaNacimiento: "2026-11-07", generoBiologico: "MASCULINO" }).success, true);
+});
+
+test("recepción conserva síntomas de borradores anteriores sin enviar campos retirados", () => {
+  const { argentinaDate, receptionDate } = loadReceptionDates();
+  const { clinicalSchema, restoreClinicalDraft, toTriageRequest } = loadTypeScript("features/reception/schema.ts", {
+    require(specifier) {
+      if (specifier === "zod") return { z };
+      if (specifier === "@/lib/argentina-date") return argentinaDate;
+      if (specifier === "./date-format") return receptionDate;
+      throw new Error(`Unexpected module: ${specifier}`);
+    },
+  });
+
+  const draft = restoreClinicalDraft({
+    motivoConsulta: "Malestar desde esta mañana",
+    sintomas: "Náuseas, fiebre",
+    inicio: "Esta mañana",
+    fiebre: true,
+    signosAlarma: "Dificultad para respirar",
+    dolores: [{ localizacion: "abdomen", intensidad: "8" }],
+    medicamentos: "Medicación habitual",
+  });
+  assert.equal(draft.evolucion, "");
+  assert.equal(draft.sintomas, "Náuseas, fiebre\nDificultad para respirar\nDolor en abdomen (intensidad 8/10)");
+  assert.equal(restoreClinicalDraft(draft).sintomas, draft.sintomas);
+  assert.equal(clinicalSchema.safeParse(draft).success, false);
+
+  const request = toTriageRequest(clinicalSchema.parse({ ...draft, evolucion: "estable" }));
+  assert.deepEqual(Array.from(request.sintomas), ["Náuseas, fiebre", "Dificultad para respirar", "Dolor en abdomen (intensidad 8/10)"]);
+  assert.deepEqual(Array.from(request.dolores), []);
+  assert.deepEqual(Array.from(request.medicamentos), ["Medicación habitual"]);
+  assert.equal("fiebre" in request, false);
+  assert.equal("signosAlarma" in request, false);
 });
 
 test("apiClient acepta 204 vacío, JSON 200 y conserva el error 409", async () => {
@@ -209,7 +300,7 @@ test("la ruta administrativa consulta sesiones del sector y finaliza conservando
   ]);
 });
 
-test("recepción edita la credencial y guarda la selección de cobertura por admisión", async () => {
+test("recepción edita y elimina credenciales y guarda la selección por admisión", async () => {
   const calls = [];
   const route = loadTypeScript("app/api/staff/reception/route.ts", {
     require: (specifier) => {
@@ -219,7 +310,7 @@ test("recepción edita la credencial y guarda la selección de cobertura por adm
       }
       if (specifier === "@/lib/api/server") {
         return { backendRequest: async (url, init) => {
-          calls.push([url, init.method, JSON.parse(init.body)]);
+          calls.push([url, init.method, init.body === undefined ? undefined : JSON.parse(init.body)]);
           return {};
         } };
       }
@@ -234,12 +325,172 @@ test("recepción edita la credencial y guarda la selección de cobertura por adm
   const credential = { nombreObraSocial: "OSDE", numeroAfiliado: "12345678", plan: "310", fechaVencimiento: "2040-02-01" };
 
   assert.equal((await post({ operation: "updatePatientCredential", patientId: 2, credentialId: 9, credential })).status, 200);
+  assert.equal((await post({ operation: "deletePatientCredential", patientId: 2, credentialId: 9 })).status, 200);
+  assert.equal((await post({ operation: "deletePatientCredential", patientId: 2 })).status, 400);
   assert.equal((await post({ operation: "selectCoverage", admissionId: 7, credentialId: 9 })).status, 200);
   assert.equal((await post({ operation: "selectCoverage", admissionId: 7, credentialId: null })).status, 200);
   assert.equal((await post({ operation: "selectCoverage", admissionId: 7 })).status, 400);
   assert.deepEqual(calls, [
     ["/api/pacientes/2/obrasocial/credenciales/9", "PUT", credential],
+    ["/api/pacientes/2/obrasocial/credenciales/9", "DELETE", undefined],
     ["/api/recepcion/admisiones/7/cobertura", "PUT", { credencialId: 9 }],
     ["/api/recepcion/admisiones/7/cobertura", "PUT", { credencialId: null }],
   ]);
+});
+
+function loadSessionMiddleware(fetch) {
+  const cookies = loadTypeScript("lib/session-cookie.ts");
+  const tokens = loadTypeScript("lib/session-tokens.ts", {
+    require: (specifier) => ({
+      "next/server": { NextResponse },
+      "@/lib/session-cookie": cookies,
+      zod: { z },
+    })[specifier],
+  });
+  const { middleware } = loadTypeScript("middleware.ts", {
+    fetch,
+    require: (specifier) => ({
+      "node:crypto": { createHash },
+      "next/server": { NextResponse },
+      "@/lib/session-cookie": cookies,
+      "@/lib/session-tokens": tokens,
+    })[specifier],
+  });
+  return middleware;
+}
+
+function fakeAccessToken(lifetimeSeconds) {
+  const exp = Math.floor(Date.now() / 1000) + lifetimeSeconds;
+  return `header.${Buffer.from(JSON.stringify({ exp })).toString("base64url")}.signature`;
+}
+
+function sessionRequest(pathname, access, refresh, method = "GET") {
+  return new NextRequest(`http://localhost${pathname}`, {
+    method,
+    headers: { cookie: `pretriage_backend_token=${access}; pretriage_backend_refresh_token=${refresh}` },
+  });
+}
+
+test("la web reserva la renovación preventiva para la sonda de sesión", async () => {
+  const oldRefresh = "refresh-token-before-rotation";
+  const tokens = { token: fakeAccessToken(3600), refreshToken: "refresh-token-after-rotation", renovarTokenEn: 3600 };
+  const calls = [];
+  const middleware = loadSessionMiddleware(async (url, options) => {
+    calls.push([url.pathname, options.method, JSON.parse(options.body)]);
+    return Response.json(tokens);
+  });
+  const access = fakeAccessToken(30);
+
+  const ordinary = await middleware(sessionRequest("/api/staff/reception", access, oldRefresh));
+  assert.equal(ordinary.headers.get("x-middleware-next"), "1");
+  const legacyCheck = await middleware(sessionRequest("/api/auth/sesion", fakeAccessToken(-1), oldRefresh));
+  assert.equal(legacyCheck.headers.get("x-middleware-next"), "1");
+  assert.equal(calls.length, 0);
+
+  const heartbeat = await middleware(sessionRequest("/api/auth/sesion", access, oldRefresh, "POST"));
+  assert.deepEqual(calls, [["/api/renovar", "POST", { refreshToken: oldRefresh }]]);
+  assert.equal(heartbeat.cookies.get("pretriage_backend_token").value, tokens.token);
+  assert.equal(heartbeat.cookies.get("pretriage_backend_refresh_token").value, tokens.refreshToken);
+  assert.ok(heartbeat.cookies.getAll().every((cookie) => cookie.httpOnly));
+  assert.ok(heartbeat.headers.get("x-middleware-request-cookie").includes(tokens.token));
+  assert.match(heartbeat.headers.get("cache-control"), /no-store/);
+});
+
+test("las solicitudes simultáneas con acceso vencido comparten una sola rotación", async () => {
+  let respond;
+  let calls = 0;
+  const middleware = loadSessionMiddleware(() => {
+    calls++;
+    return new Promise((resolve) => { respond = resolve; });
+  });
+  const access = fakeAccessToken(-1);
+  const refresh = "same-refresh-for-concurrent-requests";
+  const page = middleware(sessionRequest("/recepcion", access, refresh));
+  const heartbeat = middleware(sessionRequest("/api/auth/sesion", access, refresh, "POST"));
+  assert.equal(calls, 1);
+  const tokens = { token: fakeAccessToken(3600), refreshToken: "rotated-refresh-for-concurrent-requests", renovarTokenEn: 3600 };
+  respond(Response.json(tokens));
+
+  const [pageResponse, heartbeatResponse] = await Promise.all([page, heartbeat]);
+  assert.deepEqual(pageResponse.cookies.getAll(), heartbeatResponse.cookies.getAll());
+  assert.equal(pageResponse.cookies.get("pretriage_backend_refresh_token").value, tokens.refreshToken);
+
+  const stale = await middleware(sessionRequest("/api/auth/sesion", access, refresh, "POST"));
+  assert.equal(stale.status, 503);
+  assert.equal(stale.cookies.getAll().length, 0);
+  assert.equal(calls, 1);
+
+  const invalidated = middleware(sessionRequest("/api/auth/sesion", access, "unrecognized-refresh-token", "POST"));
+  assert.equal(calls, 2);
+  respond(Response.json({}, { status: 401 }));
+  const invalidResponse = await invalidated;
+  assert.equal(invalidResponse.status, 401);
+  assert.equal(invalidResponse.cookies.getAll().length, 3);
+  assert.ok(invalidResponse.cookies.getAll().every((cookie) => cookie.maxAge === 0));
+});
+
+test("una falla temporal de renovación conserva las cookies y permite reintentar", async () => {
+  const tokens = { token: fakeAccessToken(3600), refreshToken: "refresh-token-after-retry", renovarTokenEn: 3600 };
+  let calls = 0;
+  const middleware = loadSessionMiddleware(async () => {
+    calls++;
+    return calls === 1 ? Response.json({}, { status: 503 }) : Response.json(tokens);
+  });
+  const access = fakeAccessToken(30);
+  const refresh = "refresh-token-that-can-be-retried";
+  const request = () => sessionRequest("/api/auth/sesion", access, refresh, "POST");
+
+  const unavailable = await middleware(request());
+  assert.equal(unavailable.status, 503);
+  assert.equal(unavailable.cookies.getAll().length, 0);
+  const renewed = await middleware(request());
+  assert.equal(renewed.cookies.get("pretriage_backend_refresh_token").value, tokens.refreshToken);
+});
+
+test("perfil del personal actualiza solo nombre y apellido del usuario autenticado", async () => {
+  const calls = [];
+  const profile = loadTypeScript("features/auth/staff-profile.ts");
+  const { PUT } = loadTypeScript("app/api/staff/account/profile/route.ts", {
+    require: (specifier) => ({
+      "next/server": { NextResponse },
+      zod: { z },
+      "@/features/auth/staff-profile": profile,
+      "@/lib/api/route": {
+        apiErrorResponse: (error) => Response.json({ message: error.message }, { status: error.status }),
+      },
+      "@/lib/api/server": {
+        backendRequest: async (path, options) => {
+          const data = JSON.parse(options.body);
+          calls.push({ path, method: options.method, data });
+          if (data.nombre === "Bloqueado") {
+            throw Object.assign(new Error("La sesión expiró."), { status: 401 });
+          }
+          return { ...data, id: "staff-fixture", email: "staff@example.test", membresias: [] };
+        },
+      },
+    })[specifier],
+  });
+
+  const save = (data) => PUT(new Request("http://localhost/api/staff/account/profile", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  }));
+
+  assert.equal((await save({ nombre: " ", apellido: "Pérez" })).status, 400);
+  assert.equal((await save({ nombre: "A".repeat(121), apellido: "Pérez" })).status, 400);
+  assert.equal(calls.length, 0);
+
+  const updated = await save({
+    nombre: "  María José ",
+    apellido: " Pérez ",
+    id: "another-user",
+    email: "other@example.test",
+    administradorPlataforma: true,
+  });
+  const names = { nombre: "María José", apellido: "Pérez" };
+  assert.equal(updated.status, 200);
+  assert.deepEqual(await updated.json(), names);
+  assert.deepEqual(calls, [{ path: "/api/staff/me", method: "PUT", data: names }]);
+  assert.equal((await save({ nombre: "Bloqueado", apellido: "Pérez" })).status, 401);
 });

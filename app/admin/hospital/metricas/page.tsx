@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StaffShell } from "@/components/staff-shell";
-import { hoyIso } from "@/features/admin/hospital-metrics";
+import { hoyIso } from "@/lib/argentina-date";
 import { HospitalMetricsPanel } from "@/features/admin/hospital-metrics-panel";
 import { getSession } from "@/lib/session";
-import { getStaffContext } from "@/lib/staff-context";
+import { getStaffContext, staffDisplayName } from "@/lib/staff-context";
 import { hasMultipleHospitals } from "@/lib/workspace-routing";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +26,7 @@ export default async function HospitalMetricsPage({ searchParams }: { searchPara
   const params = await searchParams;
   const context = await getStaffContext();
   if (!context) redirect("/");
+  const userName = staffDisplayName(context, session.user, "Administrador");
 
   const hospitalIdParam = primerParametro(params.hospitalId).trim();
   const desde = primerParametro(params.desde);
@@ -46,7 +47,7 @@ export default async function HospitalMetricsPage({ searchParams }: { searchPara
         desde={desde}
         hasta={hasta}
         hoyInicial={hoyIso()}
-        userName={session.user.name ?? session.user.email ?? "Administrador"}
+        userName={userName}
       />
     );
   }
@@ -58,7 +59,6 @@ export default async function HospitalMetricsPage({ searchParams }: { searchPara
   // Solo un admin hospitalario puede ver esta pantalla; cualquier otro rol vuelve al inicio.
   const ownHospital = context.membresias.find((item) => item.roles.includes("ADMIN_HOSPITAL"));
   if (!ownHospital) redirect("/");
-  const userName = session.user.name ?? session.user.email ?? "Administrador";
   return (
     <StaffShell
       role="Administración"

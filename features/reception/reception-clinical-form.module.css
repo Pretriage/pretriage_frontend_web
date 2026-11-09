@@ -1,0 +1,61 @@
+.primary {
+  gap: 18px;
+}
+
+.heading {
+  display: grid;
+  gap: 6px;
+}
+
+.heading h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.additional summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.additional summary span,
+.footer p {
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 450;
+}
+
+.additional[open] summary {
+  margin-bottom: 18px;
+}
+
+.footer {
+  display: grid;
+  gap: 14px;
+}
+
+.footer p {
+  margin: 0;
+}
+
+.actions,
+.nextActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.actions {
+  justify-content: space-between;
+}
+
+.summaryList dd {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .summaryList div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

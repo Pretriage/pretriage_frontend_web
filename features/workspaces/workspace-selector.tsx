@@ -76,7 +76,10 @@ export function WorkspaceSelector({ memberships, accountLabel, platformAdmin }: 
 
         <footer className="workspace-footer">
           <span>Sesión iniciada como <strong>{accountLabel}</strong></span>
-          <BotonCierreSesion clase="workspace-logout" etiqueta="Cerrar sesión" etiquetaEnProceso="Cerrando…" />
+          <div className="flex flex-wrap items-center gap-4">
+            <Link className="workspace-logout" href="/cuenta/perfil">Perfil</Link>
+            <BotonCierreSesion clase="workspace-logout" etiqueta="Cerrar sesión" etiquetaEnProceso="Cerrando…" />
+          </div>
         </footer>
       </section>
     </main>

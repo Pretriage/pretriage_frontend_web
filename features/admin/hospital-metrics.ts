@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { components } from "@/contracts/pretriage-api";
+import { fechaIsoValida, hoyIso } from "@/lib/argentina-date";
 import {
   esNivelGravedad,
   NIVEL_GRAVEDAD_CLASS,
@@ -53,47 +54,6 @@ export function porcentajeDesdeConteos(parte?: number | null, total?: number | n
     return null;
   }
   return (parte / total) * 100;
-}
-
-/** Fecha serial yyyy-MM-dd -> dd/MM/yyyy. */
-export function formatoFechaIso(valor?: string | null) {
-  if (!fechaIsoValida(valor) || typeof valor !== "string") return "-";
-  const [anio, mes, dia] = valor.split("-");
-  return `${dia}/${mes}/${anio}`;
-}
-
-/** Fecha serial yyyy-MM-dd -> dd/MM para las etiquetas de los ejes. */
-export function formatoFechaCorta(valor?: string | null) {
-  const completa = formatoFechaIso(valor);
-  return completa === "-" ? completa : completa.slice(0, 5);
-}
-
-/** Valida forma yyyy-MM-dd y fecha de calendario real (rechaza 30-02, etc.). */
-export function fechaIsoValida(valor?: string | null): boolean {
-  if (typeof valor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
-  const [anio, mes, dia] = valor.split("-").map(Number) as [number, number, number];
-  const fecha = new Date(anio, mes - 1, dia);
-  return (
-    fecha.getFullYear() === anio && fecha.getMonth() === mes - 1 && fecha.getDate() === dia
-  );
-}
-
-/** ISO local con partes de fecha locales; nunca toISOString() (corta por UTC). */
-function isoLocal(fecha: Date) {
-  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}-${String(
-    fecha.getDate(),
-  ).padStart(2, "0")}`;
-}
-
-export function hoyIso() {
-  return isoLocal(new Date());
-}
-
-export function ayerIso(hoy = hoyIso()) {
-  const [anio, mes, dia] = hoy.split("-").map(Number) as [number, number, number];
-  const ayer = new Date(anio, mes - 1, dia);
-  ayer.setDate(ayer.getDate() - 1);
-  return isoLocal(ayer);
 }
 
 type ErroresDeRango = { desde?: string; hasta?: string };

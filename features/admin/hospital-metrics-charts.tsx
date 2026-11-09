@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { formatoFechaIso } from "@/lib/argentina-date";
 import {
   formatoConteo,
-  formatoFechaCorta,
-  formatoFechaIso,
   formatoPorcentajeEntero,
   formatoPromedio,
   techoSerie,
@@ -172,7 +171,7 @@ export function SerieVerticalGrafico({ serie }: { serie: SerieDiariaItem[] }) {
                   </span>
                 </span>
                 <span className="metrics-vbar-label" aria-hidden="true">
-                  {formatoFechaCorta(dia.fecha)}
+                  {formatoFechaIso(dia.fecha)}
                 </span>
               </button>
             );

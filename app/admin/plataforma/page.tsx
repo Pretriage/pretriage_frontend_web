@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { PlatformAdminWorkspace } from "@/features/admin/platform-admin-workspace";
 import { getSession } from "@/lib/session";
-import { getStaffContext } from "@/lib/staff-context";
+import { getStaffContext, staffDisplayName } from "@/lib/staff-context";
 
 export const dynamic = "force-dynamic";
 
@@ -10,5 +10,5 @@ export default async function PlatformAdminPage() {
   if (!session) redirect("/login");
   const context = await getStaffContext();
   if (!context?.administradorPlataforma) redirect("/");
-  return <PlatformAdminWorkspace userName={session.user.name ?? session.user.email ?? "Administrador"} />;
+  return <PlatformAdminWorkspace userName={staffDisplayName(context, session.user, "Administrador")} />;
 }

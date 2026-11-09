@@ -1,0 +1,117 @@
+.input {
+  min-width: 0;
+}
+
+.control {
+  position: relative;
+}
+
+.control .input {
+  padding-inline-end: 46px;
+}
+
+.trigger {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 5px;
+  translate: 0 -50%;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--blue);
+  cursor: pointer;
+}
+
+.trigger:not(:disabled):hover {
+  background: var(--blue-soft);
+}
+
+.trigger:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.input[aria-invalid="true"]:not(:focus) {
+  border-color: var(--red);
+}
+
+.input:disabled {
+  background: var(--canvas);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.picker {
+  width: max-content;
+  max-width: calc(100vw - 1rem);
+  max-height: calc(100dvh - 1rem);
+  margin: auto;
+  overflow: auto;
+  padding: .75rem;
+  border: 1px solid #cdd7e4;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 6px 20px #14223d24;
+}
+
+.picker:popover-open {
+  display: block;
+  inset: auto;
+  margin: 0;
+}
+
+.picker:popover-open:empty {
+  visibility: hidden;
+}
+
+.picker[open]::backdrop {
+  background: #14223d66;
+}
+
+.picker .closeDialog {
+  display: none;
+}
+
+.picker[open] .closeDialog {
+  display: inline-flex;
+  margin-block-start: .5rem;
+}
+
+.calendar:global(.rdp-root) {
+  --rdp-accent-color: var(--blue);
+  --rdp-day-height: 34px;
+  --rdp-day-width: 34px;
+  --rdp-day_button-height: 32px;
+  --rdp-day_button-width: 32px;
+}
+
+.calendar :global(.rdp-month_caption) {
+  padding-inline-end: calc(var(--rdp-nav_button-width) * 2);
+}
+
+.calendar :global(.rdp-dropdown_root) {
+  font-size: .875rem;
+}
+
+.calendar :global(.rdp-day_button):hover:not(:disabled) {
+  background: var(--blue-soft);
+}
+
+.monthPicker {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: .75rem;
+  width: min(17rem, calc(100vw - 3.5rem));
+}
+
+.monthActions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: .5rem;
+}

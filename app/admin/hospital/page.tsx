@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { HospitalAdminWorkspace } from "@/features/admin/hospital-admin-workspace";
 import { getSession } from "@/lib/session";
-import { getStaffContext } from "@/lib/staff-context";
+import { getStaffContext, staffDisplayName } from "@/lib/staff-context";
 import { hasMultipleHospitals } from "@/lib/workspace-routing";
 
 export const dynamic = "force-dynamic";
@@ -15,5 +15,5 @@ export default async function HospitalAdminPage({ searchParams }: { searchParams
     item.roles.includes("ADMIN_HOSPITAL") &&
     (!Number.isSafeInteger(selectedHospitalId) || item.hospitalId === selectedHospitalId));
   if (!membership) redirect("/");
-  return <HospitalAdminWorkspace hospitalId={membership.hospitalId} hospitalName={membership.hospitalNombre} roles={membership.roles} canSwitchHospital={hasMultipleHospitals(context?.membresias ?? [])} userName={session.user.name ?? session.user.email ?? "Administrador"} />;
+  return <HospitalAdminWorkspace hospitalId={membership.hospitalId} hospitalName={membership.hospitalNombre} roles={membership.roles} canSwitchHospital={hasMultipleHospitals(context?.membresias ?? [])} userName={staffDisplayName(context, session.user, "Administrador")} />;
 }

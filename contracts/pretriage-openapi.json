@@ -2203,6 +2203,34 @@
             }
           }
         }
+      },
+      "put": {
+        "tags": [
+          "staff-access-controller"
+        ],
+        "operationId": "actualizarPerfil",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActualizarPerfilStaffRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffMeResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/recepcion/sesiones/activa": {
@@ -3554,8 +3582,9 @@
           },
           "plan": {
             "type": "string",
+            "maxLength": 255,
             "minLength": 1,
-            "pattern": "^[A-Za-z0-9 ]+$"
+            "pattern": "^[\\p{L}\\p{M}\\p{N} .+()/-]+$"
           },
           "fechaVencimiento": {
             "type": "string",
@@ -5429,6 +5458,25 @@
         },
         "required": [
           "activa"
+        ]
+      },
+      "ActualizarPerfilStaffRequest": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 0
+          },
+          "apellido": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 0
+          }
+        },
+        "required": [
+          "apellido",
+          "nombre"
         ]
       },
       "StaffMeResponse": {

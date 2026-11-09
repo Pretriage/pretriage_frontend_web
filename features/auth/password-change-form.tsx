@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useRef, useState } from "react";
 import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
+import { withSessionRequest } from "@/lib/session-request";
 import {
   isNewPasswordValid,
   passwordRules,
@@ -64,7 +65,7 @@ export function PasswordChangeForm() {
     setPending(true);
     setError(null);
 
-    const response = await fetch("/api/staff/account/password", {
+    const response = await withSessionRequest(() => fetch("/api/staff/account/password", {
       method: "POST",
       cache: "no-store",
       credentials: "same-origin",
@@ -73,7 +74,7 @@ export function PasswordChangeForm() {
         contraseniaActual: currentPassword,
         contraseniaNueva: newPassword,
       }),
-    }).catch(() => null);
+    })).catch(() => null);
 
     if (!response) {
       setError(GENERIC_ERROR);
@@ -111,7 +112,7 @@ export function PasswordChangeForm() {
   }
 
   return (
-    <form className="login-form password-change-form" onSubmit={submit}>
+    <form className="form-panel" onSubmit={submit}>
       <RequiredFieldsNote />
       <label className="field">
         <RequiredLabel>Contraseña actual</RequiredLabel>
@@ -207,21 +208,11 @@ export function PasswordChangeForm() {
         </div>
       ) : null}
 
-      <button
-        className="button button-primary button-wide"
-        disabled={!canSubmit}
-        type="submit"
-      >
-        {pending ? "Guardando…" : "Cambiar contraseña"}
-      </button>
-
-      <button 
-        className="button button-secondary" 
-        type="button" 
-        onClick={() => window.location.replace("../")}
-      >
-        Volver
-      </button>
+      <div className="form-actions">
+        <button className="button button-primary" disabled={!canSubmit} type="submit">
+          {pending ? "Guardando…" : "Cambiar contraseña"}
+        </button>
+      </div>
     </form>
   );
 }

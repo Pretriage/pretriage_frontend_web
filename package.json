@@ -13,6 +13,7 @@
     "contracts:generate": "openapi-typescript contracts/pretriage-openapi.json -o contracts/pretriage-api.d.ts"
   },
   "dependencies": {
+    "@daypicker/react": "10.0.2",
     "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.101.2",
     "next": "15.5.28",

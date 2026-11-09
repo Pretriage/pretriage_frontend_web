@@ -4,24 +4,23 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
+import { DatePicker } from "@/components/date-picker";
 import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 import type { HospitalRole } from "@/lib/staff-context";
 import { StaffShell } from "@/components/staff-shell";
 import { apiGet } from "@/lib/api/client";
+import { ayerIso, formatoFechaIso, hoyIso } from "@/lib/argentina-date";
 import { DistribucionVerticalGrafico, SerieVerticalGrafico } from "./hospital-metrics-charts";
 import { HospitalMetricsNavigation } from "./hospital-metrics-navigation";
 import {
-  ayerIso,
   distribucionBot,
   distribucionMedico,
   esRangoCerrado,
   esRangoDeHoy,
   formatoConteo,
-  formatoFechaIso,
   formatoPorcentajeEntero,
   formatoPromedio,
-  hoyIso,
   porcentajeDesdeConteos,
   rangoFormularioSchema,
   techoSerie,
@@ -93,8 +92,7 @@ export function HospitalMetricsPanel({
   const [vistaDistribuciones, setVistaDistribuciones] = useState<"horizontal" | "vertical">("horizontal");
   const [vistaSerie, setVistaSerie] = useState<"horizontal" | "vertical">("horizontal");
 
-  // El servidor y el navegador pueden estar en husos distintos o cruzar la
-  // medianoche: tras hidratar se adopta la fecha local del navegador.
+  // Actualiza el día de Argentina si la pantalla sigue abierta a medianoche.
   useEffect(() => {
     const actualizarHoy = () => setHoy(hoyIso());
     actualizarHoy();
@@ -196,32 +194,44 @@ export function HospitalMetricsPanel({
           </div>
           <form className="metrics-form" onSubmit={(evento) => void enviarConsulta(evento)} noValidate>
             <RequiredFieldsNote />
-            <label className="field">
-              <RequiredLabel>Desde</RequiredLabel>
-              <input
-                type="date"
-                required
-                {...formRango.register("desde")}
-                max={ayerIso(hoy)}
-                disabled={enPendiente}
-                aria-invalid={errorDesde ? true : undefined}
-                aria-describedby={errorDesde ? "metricas-desde-error" : undefined}
+            <div className="field">
+              <label htmlFor="metrics-start-date"><RequiredLabel>Desde</RequiredLabel></label>
+              <Controller
+                control={formRango.control}
+                name="desde"
+                render={({ field }) => (
+                  <DatePicker
+                    {...field}
+                    id="metrics-start-date"
+                    required
+                    max={ayerIso(hoy)}
+                    disabled={enPendiente}
+                    aria-invalid={errorDesde ? true : undefined}
+                    aria-describedby={errorDesde ? "metricas-desde-error" : undefined}
+                  />
+                )}
               />
               <span id="metricas-desde-error" className="field-error">{errorDesde ?? ""}</span>
-            </label>
-            <label className="field">
-              <RequiredLabel>Hasta</RequiredLabel>
-              <input
-                type="date"
-                required
-                {...formRango.register("hasta")}
-                max={hoy}
-                disabled={enPendiente}
-                aria-invalid={errorHasta ? true : undefined}
-                aria-describedby={errorHasta ? "metricas-hasta-error" : undefined}
+            </div>
+            <div className="field">
+              <label htmlFor="metrics-end-date"><RequiredLabel>Hasta</RequiredLabel></label>
+              <Controller
+                control={formRango.control}
+                name="hasta"
+                render={({ field }) => (
+                  <DatePicker
+                    {...field}
+                    id="metrics-end-date"
+                    required
+                    max={hoy}
+                    disabled={enPendiente}
+                    aria-invalid={errorHasta ? true : undefined}
+                    aria-describedby={errorHasta ? "metricas-hasta-error" : undefined}
+                  />
+                )}
               />
               <span id="metricas-hasta-error" className="field-error">{errorHasta ?? ""}</span>
-            </label>
+            </div>
             <button className="button button-primary" type="submit" disabled={enPendiente}>
               Consultar
             </button>

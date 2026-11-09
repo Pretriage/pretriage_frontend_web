@@ -145,23 +145,41 @@ stores the returned access token, rotating refresh token, and backend-provided
 renewal time in HttpOnly, SameSite=Lax session cookies. Browser JavaScript never
 receives the tokens and credentials are not persisted.
 
-Before protected pages and `/api/staff/*` handlers run, `middleware.ts` renews access
-through backend `POST /api/renovar` when the current token has at most 60 seconds
-remaining. Every successful renewal atomically replaces both cookies because the
-backend rotates refresh tokens. An invalid refresh clears the complete session;
-a transient renewal failure keeps a still-valid access token and never destroys
-the refresh token. Logout clears all three session cookies.
+Protected screens check the session with `POST /api/auth/sesion` on mount, every
+30 seconds while open, and when the page regains focus, becomes visible, is
+restored from the browser history, or reconnects. The middleware calls backend
+`POST /api/renovar` when the check is within 60 seconds of expiry. Other protected
+requests use their current access token until it expires, then can recover through
+the same renewal flow. Each rotation replaces all three HttpOnly cookies.
+
+The browser serializes checks with logout and password changes across tabs when
+Web Locks are available, or within the current tab otherwise. Concurrent server
+requests with the same refresh token share an in-flight renewal within a single
+middleware runtime. After a successful rotation that runtime keeps only the old
+token's digest for two seconds, so late requests retry with the browser's updated
+cookies. The rotated credentials are released once the operation completes.
+A transient renewal failure keeps the cookies and the browser retries after 10
+seconds. An invalid refresh clears the session and sends the user to login.
 
 The public `/restablecer-contrasena` flow uses the server-side
 `POST /api/auth/password-reset` BFF for token request, validation, and password
 change. The one-time token and passwords remain only in component memory while
 the page is open; they are never stored in browser storage or added to a URL.
 
-## Authenticated password change
+## Staff profile and password change
 
-`/cuenta/contrasena` is a standalone protected page for every staff role,
-including platform admins. It asks for the current password, the new password,
-and its repetition; the client mirrors the backend strength rules (8–32 code
+`/cuenta/perfil` is a protected page available from the Perfil link in the staff
+and platform admin headers and the workspace selector. It uses the staff
+layout and preserves the originating module and hospital when the current
+memberships allow it. It reads the signed-in staff account via
+`GET /api/staff/me`. The profile form can change the account
+first and last names through `PUT /api/staff/account/profile`, which forwards to
+`PUT /api/staff/me`. The sign-in email is displayed as read-only. Staff headers
+display the saved name from staff context.
+
+The password form is on the same page. The former `/cuenta/contrasena` route
+redirects to that section. It asks for the current password, the new password,
+and its repetition. The client mirrors the backend strength rules (8–32 code
 points, uppercase, lowercase, digit or special, different from the current one)
 and blocks submission before consuming an attempt. The three-attempt/24-hour
 lock notice is always visible.
@@ -173,8 +191,7 @@ stay in memory: they are never written to storage, URLs, logs, or analytics. On
 success the BFF clears the access, refresh, and renewal cookies in the same
 response and the client replaces the history entry with
 `/login?cambio=exito`, where login shows the success notice. A `423` disables
-the form for the current view; a `401` clears the session and redirects. The
-entry link lives in the staff header and the platform-admin header. See
+the form for the current view; a `401` clears the session and redirects. See
 `docs/backend-contract.md` for the error shapes and the Auth0 revocation
 limitation.
 
@@ -238,7 +255,48 @@ open-data service.
 Staff web forms mark required fields and groups with an asterisk and explain the
 marker near the form. Optional fields have plain labels. For optional sections
 with their own validation, the required marks apply when the user adds the data,
-such as a coverage credential or a pain entry.
+such as a coverage credential.
+
+## Shared form controls
+
+Single-choice dropdowns use `SearchableCombobox`, the searchable Province control.
+The options can display labels while retaining the IDs or codes sent to the API.
+Existing fields that accept free text opt in explicitly.
+
+`DatePicker` always shows `DD/MM/AAAA` for birth dates and metrics ranges.
+It accepts typing with automatic separators and opens a compact DayPicker next
+to the field. Months, weekdays and navigation labels are in Spanish regardless
+of browser locale. Credential expiration uses `MM/AAAA` with the same typing
+behavior and a Spanish month and year selector. The forms validate the dates
+and keep ISO values for the API. Dates shown in lists
+also use `DD/MM/AAAA`. Instants are displayed in Argentina's time zone.
+
+## Argentine health coverage plans
+
+The reception form bundles published plan names for the 16 demo providers in
+`features/reception/coverage-plans.ts`. The options are references from official
+sources, including regional cartillas. Reception can enter another plan printed
+on the credential. «Cobertura general» describes a provider's standard coverage
+when it publishes no differentiated tiers.
+
+| Provider | Source |
+| --- | --- |
+| OSDE | [Contracts by plan](https://www.osde.com.ar/conoce-osde/contrato-de-adhesion) |
+| Swiss Medical | [SMG02](https://www.swissmedical.com.ar/smgnewsite/pag_internas/pdf/planes/SMG02.pdf), [SMG20](https://www.swissmedical.com.ar/smgnewsite/pag_internas/pdf/planes/SMG20.pdf), [SMG30](https://www.swissmedical.com.ar/smgnewsite/pag_internas/pdf/planes/SMG30.pdf), [annex of open plans](https://www.swissmedical.com.ar/smgnewsite/pag_internas/pdf/planes/S1261-ANEXOS-PLANES-ABIERTOS.pdf) |
+| Galeno | [Published plan guide](https://www.galeno.com.ar/blog/planes-de-salud-galeno-opciones-flexibles-para-tu-bienestar/) |
+| Medifé | [Cartillas by plan](https://www.medife.com.ar/mapa-cartilla-pdf) |
+| Omint | [Cartillas by plan](https://www.omint.com.ar/Website2/Default.aspx?tabid=1500&texto=cartilla+medica) |
+| SanCor Salud | [2024–2025 report, p. 37](https://repo.sancorsalud.com.ar/webinstitucional/reportes/Reporte_2025/Reporte_2025.pdf) |
+| Accord Salud | [Plan selector](https://gestion.accordsalud.com.ar/cartilla) |
+| Unión Personal | [Plan selector](https://gestion.unionpersonal.com.ar/cartilla) |
+| OSECAC | [PMO coverage](https://www.osecac.org.ar/ARCHIVOS/ANEXO_I.PDF) |
+| OSDEPYM | [Plan table](https://www.osdepym.com.ar/files/portal/coseguros.pdf) |
+| OSPE | [GBA Zona Sur plans](https://www.ospesalud.com.ar/wp-content/uploads/2026/10/GBA-Zona-Sur-RG.pdf) |
+| OSUTHGRA | [PMO coverage](https://osuthgra.org.ar/consultorios/) |
+| OSPERYH | [Programa Médico](https://osperyh.org.ar/cartilla-medica/) |
+| IOMA | [Coverage guide, § 1.8](https://www.ioma.gba.gob.ar/wp-content/uploads/2022/02/Gu%C3%ADa-de-tr%C3%A1mites-para-trabajadoras-es3.pdf) |
+| PAMI | [Affiliation and coverage](https://www.pami.org.ar/preguntas-frecuentes) |
+| DOSUBA | [Tipo de Plan selector](https://cartilla.dosuba.uba.ar/) |
 
 ## Integration verification
 

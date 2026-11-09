@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 
-// Sonda liviana de sesión para la guardia anti-atrás del navegador.
-// No expone tokens ni datos clínicos, solo si hay sesión válida.
+// El middleware renueva la sesión cuando corresponde antes de esta sonda.
+// La respuesta solo indica si la sesión está activa.
 export const dynamic = "force-dynamic";
 
 function conCabecerasSinCache(respuesta: NextResponse) {
@@ -26,3 +26,5 @@ export async function GET() {
     NextResponse.json({ autenticado: true }),
   );
 }
+
+export const POST = GET;

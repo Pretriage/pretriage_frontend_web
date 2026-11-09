@@ -1,5 +1,6 @@
 import "server-only";
 import { backendRequest } from "@/lib/api/server";
+import type { StaffSession } from "@/lib/session";
 
 export type HospitalRole =
   | "ADMIN_HOSPITAL"
@@ -29,6 +30,15 @@ export async function getStaffContext() {
   } catch {
     return null;
   }
+}
+
+export function staffDisplayName(
+  context: StaffContext | null,
+  user: StaffSession["user"],
+  fallback: string,
+) {
+  const fullName = `${context?.nombre ?? ""} ${context?.apellido ?? ""}`.trim();
+  return fullName || user.name || user.email || fallback;
 }
 
 export function hasRole(context: StaffContext | null, role: HospitalRole) {
