@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
+import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 import locations from "@/lib/geo/argentina-locations.json";
 import type { HospitalConfiguration } from "./hospital-configuration";
 import styles from "./staff-invitation-form.module.css";
@@ -101,17 +102,18 @@ export function StaffInvitationForm({ configuration, disabled = false, error, de
   const invalid = (key: keyof FormErrors) => errors[key] ? "true" : undefined;
 
   return <form className={styles.form} onSubmit={submit} noValidate>
+    <RequiredFieldsNote />
     <div className={styles.section}>
-      <label className={styles.field}>Correo electrónico
-        <input ref={emailRef} name="email" type="email" value={email} disabled={disabled} onChange={(event) => setEmail(event.target.value)} aria-invalid={invalid("email")} aria-describedby={`invite-email-hint${errors.email ? " invite-email-error" : ""}`} />
+      <label className={styles.field}><RequiredLabel>Correo electrónico</RequiredLabel>
+        <input ref={emailRef} name="email" type="email" required value={email} disabled={disabled} onChange={(event) => setEmail(event.target.value)} aria-invalid={invalid("email")} aria-describedby={`invite-email-hint${errors.email ? " invite-email-error" : ""}`} />
       </label>
       <p className={styles.hint} id="invite-email-hint">La persona recibirá la invitación en esta dirección.</p>
       {errors.email ? <p className={styles.error} id="invite-email-error">{errors.email}</p> : null}
     </div>
 
-    <fieldset className={styles.section} disabled={disabled}>
-      <legend>Roles y permisos</legend>
-      <p className={styles.hint}>Podés asignar más de un rol. Los permisos se combinan. Seleccionados: {roles.length}.</p>
+    <fieldset className={styles.section} disabled={disabled} aria-describedby={`invite-roles-hint${errors.roles ? " invite-roles-error" : ""}`}>
+      <legend><RequiredLabel>Roles y permisos</RequiredLabel></legend>
+      <p className={styles.hint} id="invite-roles-hint">Seleccioná al menos un rol. Si elegís más de uno, los permisos se combinan. Seleccionados: {roles.length}.</p>
       <div className={styles.roleGrid} aria-describedby={errors.roles ? "invite-roles-error" : undefined}>
         {roleInfo.map((role, index) => <label className={styles.checkCard} key={role.value}>
           <input ref={index === 0 ? roleRef : undefined} type="checkbox" value={role.value} checked={roles.includes(role.value)} onChange={() => toggleRole(role.value)} aria-invalid={index === 0 ? invalid("roles") : undefined} aria-describedby={index === 0 && errors.roles ? "invite-roles-error" : undefined} />
@@ -125,25 +127,28 @@ export function StaffInvitationForm({ configuration, disabled = false, error, de
       <legend>Datos profesionales</legend>
       <p className={styles.hint}>Estos datos son obligatorios para quienes tengan el rol Medicina.</p>
       <div className={styles.medicalFields}>
-        <label className={styles.field}>Matrícula
-          <input ref={matriculaRef} value={matricula} onChange={(event) => setMatricula(event.target.value)} aria-invalid={invalid("matricula")} aria-describedby={errors.matricula ? "invite-matricula-error" : undefined} />
+        <label className={styles.field}><RequiredLabel>Matrícula</RequiredLabel>
+          <input ref={matriculaRef} required value={matricula} onChange={(event) => setMatricula(event.target.value)} aria-invalid={invalid("matricula")} aria-describedby={errors.matricula ? "invite-matricula-error" : undefined} />
         </label>
-        <label className={styles.field}>Tipo de matrícula
-          <select ref={tipoRef} value={tipoMatricula} onChange={(event) => setTipoMatricula(event.target.value)} aria-invalid={invalid("tipoMatricula")} aria-describedby={errors.tipoMatricula ? "invite-tipo-error" : undefined}><option value="NACIONAL">Nacional</option><option value="PROVINCIAL">Provincial</option></select>
+        <label className={styles.field}><RequiredLabel>Tipo de matrícula</RequiredLabel>
+          <select ref={tipoRef} required value={tipoMatricula} onChange={(event) => setTipoMatricula(event.target.value)} aria-invalid={invalid("tipoMatricula")} aria-describedby={errors.tipoMatricula ? "invite-tipo-error" : undefined}><option value="NACIONAL">Nacional</option><option value="PROVINCIAL">Provincial</option></select>
         </label>
         {errors.matricula ? <p className={styles.error} id="invite-matricula-error">{errors.matricula}</p> : null}
         {errors.tipoMatricula ? <p className={styles.error} id="invite-tipo-error">{errors.tipoMatricula}</p> : null}
-      {tipoMatricula === "PROVINCIAL" ? <label className={`${styles.field} ${styles.wide}`}>Provincia
-          <select ref={jurisdictionRef} value={jurisdiccion} onChange={(event) => setJurisdiccion(event.target.value)} aria-invalid={invalid("jurisdiccionMatricula")} aria-describedby={errors.jurisdiccionMatricula ? "invite-province-error" : undefined}><option value="">Seleccionar provincia</option>{locations.provinces.map((province) => <option key={province.name} value={province.name}>{province.name}</option>)}</select>
+      {tipoMatricula === "PROVINCIAL" ? <label className={`${styles.field} ${styles.wide}`}><RequiredLabel>Provincia</RequiredLabel>
+          <select ref={jurisdictionRef} required value={jurisdiccion} onChange={(event) => setJurisdiccion(event.target.value)} aria-invalid={invalid("jurisdiccionMatricula")} aria-describedby={errors.jurisdiccionMatricula ? "invite-province-error" : undefined}><option value="">Seleccionar provincia</option>{locations.provinces.map((province) => <option key={province.name} value={province.name}>{province.name}</option>)}</select>
         </label> : null}
         {tipoMatricula === "PROVINCIAL" && errors.jurisdiccionMatricula ? <p className={`${styles.error} ${styles.wide}`} id="invite-province-error">{errors.jurisdiccionMatricula}</p> : null}
       </div>
     </fieldset> : null}
 
-    {isMedical ? <fieldset ref={specialtyGroupRef} tabIndex={-1} className={styles.section} disabled={disabled} aria-describedby={errors.especialidadIds ? "invite-specialty-error" : undefined}>
-      <legend>Especialidades</legend>
-      <p className={styles.hint}>Elegí las especialidades habilitadas en este hospital. Seleccionadas: {specialtyIds.filter((id) => enabledIds.has(id)).length}.</p>
-      {unavailableSpecialtyIds.length ? <div className={styles.staleNotice} role="alert">{unavailableSpecialtyIds.length} especialidad{unavailableSpecialtyIds.length === 1 ? " dejó" : "es dejaron"} de estar disponible. <button type="button" onClick={() => setSpecialtyIds((current) => current.filter((id) => enabledIds.has(id)))} disabled={disabled}>Quitar especialidades no disponibles</button></div> : null}
+    {isMedical ? <fieldset ref={specialtyGroupRef} tabIndex={-1} className={styles.section} disabled={disabled} aria-describedby={`invite-specialty-hint${errors.especialidadIds ? " invite-specialty-error" : ""}`}>
+      <legend><RequiredLabel>Especialidades</RequiredLabel></legend>
+      <p className={styles.hint} id="invite-specialty-hint">Elegí al menos una especialidad habilitada en este hospital. Seleccionadas: {specialtyIds.filter((id) => enabledIds.has(id)).length}.</p>
+      {unavailableSpecialtyIds.length ? <div className={styles.staleNotice} role="alert">
+        {unavailableSpecialtyIds.length === 1 ? "1 especialidad dejó de estar disponible." : `${unavailableSpecialtyIds.length} especialidades dejaron de estar disponibles.`}{" "}
+        <button type="button" onClick={() => setSpecialtyIds((current) => current.filter((id) => enabledIds.has(id)))} disabled={disabled}>Quitar especialidades no disponibles</button>
+      </div> : null}
       {enabledSpecialties.length ? <>
         {enabledSpecialties.length > 8 ? <label className={styles.search}>Buscar especialidad<input type="search" value={specialtySearch} onChange={(event) => setSpecialtySearch(event.target.value)} placeholder="Ej. clínica" disabled={disabled} /></label> : null}
         <div className={styles.specialtyGrid} aria-describedby={errors.especialidadIds ? "invite-specialty-error" : undefined}>{visibleSpecialties.map((specialty, index) => <label className={styles.checkCard} key={specialty.id}>

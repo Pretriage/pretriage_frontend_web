@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 import styles from "./hospital-configuration-panel.module.css";
 import type { ConfigurationOperation, HospitalConfiguration, MedicalSession, Room, Sector, Specialty } from "./hospital-configuration";
 
@@ -106,12 +107,12 @@ function nameFrom(form: HTMLFormElement, field: string) {
 }
 
 function NameField({ name, label, value, disabled }: { name: string; label: string; value?: string; disabled: boolean }) {
-  return <label className="field">{label}<input name={name} defaultValue={value} required maxLength={100} disabled={disabled} onInput={(event) => event.currentTarget.setCustomValidity("")} /></label>;
+  return <label className="field"><RequiredLabel>{label}</RequiredLabel><input name={name} defaultValue={value} required maxLength={100} disabled={disabled} onInput={(event) => event.currentTarget.setCustomValidity("")} /></label>;
 }
 
 function SpecialtyField({ specialties, value, disabled }: { specialties: Specialty[]; value?: number; disabled: boolean }) {
   return (
-    <label className="field">Especialidad
+    <label className="field"><RequiredLabel>Especialidad</RequiredLabel>
       <select name="specialtyId" defaultValue={value ?? ""} required disabled={disabled} onChange={(event) => event.currentTarget.setCustomValidity("")}>
         <option value="">Seleccionar especialidad</option>
         {specialties.filter((item) => item.habilitada || item.id === value).map((item) => (
@@ -184,7 +185,7 @@ function SectorCard({ hospitalId, sector, rooms, specialties, pending, configure
         <div className="form-grid">
           <NameField name="sectorName" label="Nombre del sector" value={sector.nombre} disabled={pending} />
           <SpecialtyField specialties={specialties} value={sector.especialidadId} disabled={pending} />
-          <label className="field">Estado<select name="active" defaultValue={String(sector.activa)} disabled={pending}><option value="true">Activo</option><option value="false">Inactivo</option></select></label>
+          <label className="field"><RequiredLabel>Estado</RequiredLabel><select name="active" defaultValue={String(sector.activa)} required disabled={pending}><option value="true">Activo</option><option value="false">Inactivo</option></select></label>
         </div>
         <p className="notice notice-info">Al guardar un sector inactivo, también se desactivan sus salas. Reactivarlo no vuelve a activar las salas automáticamente.</p>
         {!specialtyEnabled ? <p className="notice notice-warning">Habilitá la especialidad o elegí otra habilitada antes de guardar el sector.</p> : null}
@@ -325,6 +326,7 @@ export function HospitalConfigurationPanel({ hospitalId, configuration, pending,
   return (
     <section className="panel admin-configuration" aria-labelledby="hospital-configuration-heading" aria-busy={pending}>
       <div className="panel-heading"><div><h2 ref={headingRef} tabIndex={-1} id="hospital-configuration-heading">Especialidades, sectores y salas</h2><p>Organizá los sectores del hospital y las salas de cada especialidad.</p></div></div>
+      <RequiredFieldsNote />
       {error ? <div className="notice notice-error" role="alert">{error.message}</div> : null}
       {pending ? <p role="status">Guardando cambios y actualizando la configuración…</p> : null}
       {successMessage ? <p className="notice notice-success" role="status">{successMessage}</p> : null}

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 
 export function LoginForm() {
   const router = useRouter();
@@ -43,8 +44,9 @@ export function LoginForm() {
 
   return (
     <form className="login-form" onSubmit={submit}>
+      <RequiredFieldsNote />
       <label className="field">
-        Correo electrónico
+        <RequiredLabel>Correo electrónico</RequiredLabel>
         <input
           autoComplete="username"
           disabled={pending}
@@ -54,7 +56,7 @@ export function LoginForm() {
         />
       </label>
       <label className="field">
-        Contraseña
+        <RequiredLabel>Contraseña</RequiredLabel>
         <input
           autoComplete="current-password"
           disabled={pending}

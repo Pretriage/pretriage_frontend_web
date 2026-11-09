@@ -18,7 +18,7 @@ type Body = Record<string, unknown> & { operation?: string };
 
 function numberValue(value: unknown, field: string) {
   if (typeof value !== "number" || !Number.isSafeInteger(value)) {
-    throw new TypeError(`${field} inválido`);
+    throw new TypeError(`${field} inválido.`);
   }
   return value;
 }
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
         const sessionId = numberValue(body.sessionId, "sessionId");
         const action = body.action;
         if (!["pausar", "reanudar", "cerrar"].includes(String(action))) {
-          throw new TypeError("Acción de sesión inválida");
+          throw new TypeError("Acción de sesión inválida.");
         }
         return NextResponse.json(
           await backendRequest<MedicalSession>(
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
         const consultationId = numberValue(body.consultationId, "consultationId");
         const action = body.action;
         if (!["presente", "ausente", "finalizar"].includes(String(action))) {
-          throw new TypeError("Acción de consulta inválida");
+          throw new TypeError("Acción de consulta inválida.");
         }
         return NextResponse.json(
           await backendRequest<QueueConsultation>(
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
         const consultationId = numberValue(body.consultationId, "consultationId");
         const decision = body.decision;
         if (!['CONFIRMAR', 'CORREGIR'].includes(String(decision))) {
-          throw new TypeError("DecisiÃ³n de prioridad invÃ¡lida");
+          throw new TypeError("Decisión de prioridad inválida.");
         }
         const review: PriorityReviewRequest = {
           decision: decision as PriorityReviewRequest["decision"],

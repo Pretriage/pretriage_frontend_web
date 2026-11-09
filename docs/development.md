@@ -221,9 +221,11 @@ npm run contracts:generate
 
 ## Argentine locations catalog
 
-Reception address fields use the bundled official Georef catalog, grouped as
-Province -> City/Locality. Runtime form use does not call an external service or
-transmit address fragments. Refresh the snapshot when territorial data changes:
+Reception address fields use the bundled official Georef catalog. The dependent
+field starts as «Localidad o barrio», becomes «Barrio» for Ciudad Autónoma de
+Buenos Aires and becomes «Localidad» for other provinces. Runtime form use does
+not call an external service or transmit address fragments. Refresh the snapshot
+when territorial data changes:
 
 ```powershell
 npm run georef:update
@@ -232,6 +234,11 @@ npm run georef:update
 The generated `lib/geo/argentina-locations.json` must be committed together with
 the update script. Its source is the public Georef API from Argentina's national
 open-data service.
+
+Staff web forms mark required fields and groups with an asterisk and explain the
+marker near the form. Optional fields have plain labels. For optional sections
+with their own validation, the required marks apply when the user adds the data,
+such as a coverage credential or a pain entry.
 
 ## Integration verification
 

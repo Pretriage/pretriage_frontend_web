@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BotonCierreSesion } from "@/components/boton-cierre-sesion";
 import { Brand } from "@/components/brand";
 import { GuardiaSesionProtegida } from "@/components/guardia-sesion-protegida";
+import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 
 type Hospital = { id: number; nombre: string; administradoresActivos: number };
 type Invitation = { emailEnviado?: boolean; tokenEntregaUnica?: string | null };
@@ -51,7 +52,21 @@ export function PlatformAdminWorkspace({ userName }: { userName: string }) {
     {query.isLoading ? <div className="loading-card">Cargando hospitales…</div> : null}
     {query.error ? <div className="notice notice-error" role="alert">{query.error.message}</div> : null}
     {message ? <div className="notice notice-success"><strong>{message}</strong>{token ? <><br />En desarrollo, copiá una sola vez:<br /><code className="secret-code">{token}</code></> : null}</div> : null}
-    <div className="record-list">{query.data?.map((hospital) => <article className="record-row platform-hospital-row" key={hospital.id}><div><strong>{hospital.nombre}</strong><span>{hospital.administradoresActivos} administradores activos</span></div><form className="inline-invite-form" onSubmit={(event) => submit(event, hospital.id)}><input aria-label={`Correo del administrador de ${hospital.nombre}`} name="email" type="email" placeholder="admin@hospital.com" required disabled={invite.isPending} /><button className="button button-primary" type="submit" disabled={invite.isPending}>{invite.isPending ? "Enviando…" : "Invitar administrador"}</button></form></article>)}</div>
+    {query.data?.length ? <RequiredFieldsNote /> : null}
+    <div className="record-list">
+      {query.data?.map((hospital) => (
+        <article className="record-row platform-hospital-row" key={hospital.id}>
+          <div><strong>{hospital.nombre}</strong><span>{hospital.administradoresActivos} administradores activos</span></div>
+          <form aria-label={`Invitar administrador a ${hospital.nombre}`} className="inline-invite-form" onSubmit={(event) => submit(event, hospital.id)}>
+            <label className="field">
+              <RequiredLabel>Correo del administrador</RequiredLabel>
+              <input name="email" type="email" placeholder="admin@hospital.com" required disabled={invite.isPending} />
+            </label>
+            <button className="button button-primary" type="submit" disabled={invite.isPending}>{invite.isPending ? "Enviando…" : "Invitar administrador"}</button>
+          </form>
+        </article>
+      ))}
+    </div>
     {invite.error ? <div className="notice notice-error" role="alert">{invite.error.message}</div> : null}
   </section></main>;
 }

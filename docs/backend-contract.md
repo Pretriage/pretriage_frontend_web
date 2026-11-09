@@ -213,7 +213,7 @@ Rules relevant to the frontend:
 - Hospitals are limited to assignments for the authenticated receptionist.
 - DNI is normalized to digits and must contain seven or eight digits.
 - An existing patient is reused by DNI; otherwise the admission request creates a reception-origin patient.
-- Reception captures and persists the structured address: street, number, optional floor, city, and province. Postal code is optional and is no longer requested by the reception form. Submitting an admission updates the address of an existing patient with the verified values while preserving an already stored postal code when none is submitted.
+- Reception captures and persists the structured address: street, number, optional floor, locality or neighborhood (`ciudad`), and province. The address form displays «Barrio» for Ciudad Autónoma de Buenos Aires and «Localidad» for other provinces. Postal code is optional and is no longer requested by the reception form. Submitting an admission updates the address of an existing patient with the verified values while preserving an already stored postal code when none is submitted.
 - A patient cannot have another active consultation.
 - Patient lookup returns `atencionEnCurso` and `estadoAtencionEnCurso`. Reception must show this before admission entry and disable creation while it is true; the create endpoint remains the authoritative concurrency guard.
 - Specialty must belong to the session hospital.

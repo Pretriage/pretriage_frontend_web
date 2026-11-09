@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
+import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 import { apiClient } from "@/lib/api/client";
 import type {
   CreatePatientCredential,
@@ -20,17 +21,17 @@ const credentialSchema = z.object({
     .string()
     .trim()
     .min(1, "Ingresá la obra social o prepaga.")
-    .regex(/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+$/, "Usá sólo letras y espacios."),
+    .regex(/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+$/, "Usá solo letras y espacios."),
   numeroAfiliado: z
     .string()
     .min(6, "Debe tener al menos 6 dígitos.")
     .max(20, "Puede tener hasta 20 dígitos.")
-    .regex(/^\d+$/, "Usá sólo números."),
+    .regex(/^\d+$/, "Usá solo números."),
   plan: z
     .string()
     .trim()
     .min(1, "Ingresá el plan.")
-    .regex(/^[A-Za-z0-9 ]+$/, "Usá sólo letras, números y espacios."),
+    .regex(/^[A-Za-z0-9 ]+$/, "Usá solo letras, números y espacios."),
   fechaVencimiento: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Ingresá la fecha de vencimiento."),
@@ -64,7 +65,7 @@ function CredentialCard({ credential, preview = false }: {
       </div>
       <h2>{credential.nombreObraSocial || "OBRA SOCIAL / PREPAGA"}</h2>
       <div className="credential-number">
-        <span>Nº de afiliado</span>
+        <span>N.º de afiliado</span>
         <strong>{credential.numeroAfiliado || "0000000000"}</strong>
       </div>
       <div className="credential-card-details">
@@ -163,28 +164,29 @@ export function ReceptionCoverageStep({
             createCredential.mutate(values);
           })}
         >
-          <div className="panel-heading"><div><h2>Nueva credencial</h2><p>Todos los campos son obligatorios.</p></div></div>
+          <div className="panel-heading"><h2>Nueva credencial</h2></div>
+          <RequiredFieldsNote />
           <div className="form-grid">
             <label className="field field-wide">
-              <span>Obra social o prepaga</span>
-              <input autoComplete="off" list="health-provider-options" placeholder="Ej. OSDE" {...form.register("nombreObraSocial")} />
+              <RequiredLabel>Obra social o prepaga</RequiredLabel>
+              <input aria-required="true" autoComplete="off" list="health-provider-options" placeholder="Ej. OSDE" {...form.register("nombreObraSocial")} />
               <datalist id="health-provider-options">{healthProviders.map((provider) => <option key={provider} value={provider} />)}</datalist>
               {form.formState.errors.nombreObraSocial ? <small className="field-error">{form.formState.errors.nombreObraSocial.message}</small> : null}
             </label>
             <label className="field field-wide">
-              <span>Nº de afiliado</span>
-              <input inputMode="numeric" placeholder="Sólo números" {...form.register("numeroAfiliado")} />
+              <RequiredLabel>N.º de afiliado</RequiredLabel>
+              <input aria-required="true" inputMode="numeric" placeholder="Solo números" {...form.register("numeroAfiliado")} />
               {form.formState.errors.numeroAfiliado ? <small className="field-error">{form.formState.errors.numeroAfiliado.message}</small> : null}
             </label>
             <label className="field">
-              <span>Plan</span>
-              <input autoComplete="off" list="health-plan-options" placeholder="Ej. 310" {...form.register("plan")} />
+              <RequiredLabel>Plan</RequiredLabel>
+              <input aria-required="true" autoComplete="off" list="health-plan-options" placeholder="Ej. 310" {...form.register("plan")} />
               <datalist id="health-plan-options">{healthPlans.map((plan) => <option key={plan} value={plan} />)}</datalist>
               {form.formState.errors.plan ? <small className="field-error">{form.formState.errors.plan.message}</small> : null}
             </label>
             <label className="field">
-              <span>Vencimiento</span>
-              <input type="date" {...form.register("fechaVencimiento")} />
+              <RequiredLabel>Vencimiento</RequiredLabel>
+              <input aria-required="true" type="date" {...form.register("fechaVencimiento")} />
               {form.formState.errors.fechaVencimiento ? <small className="field-error">{form.formState.errors.fechaVencimiento.message}</small> : null}
             </label>
           </div>
@@ -200,7 +202,7 @@ export function ReceptionCoverageStep({
         <button className="button button-danger-ghost" disabled={isCancelling || createCredential.isPending} type="button" onClick={onCancel}>
           {isCancelling ? "Cancelando…" : "Cancelar admisión"}
         </button>
-        <button className="button button-primary" disabled={isCancelling || createCredential.isPending} type="button" onClick={onContinue}>Continuar al pretriaje</button>
+        <button className="button button-primary" disabled={isCancelling || createCredential.isPending} type="button" onClick={onContinue}>Continuar al pretriage</button>
       </div>
     </div>
   );

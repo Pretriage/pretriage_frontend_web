@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
+import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 import { SearchableCombobox } from "@/components/searchable-combobox";
 import { StaffShell } from "@/components/staff-shell";
 import argentinaLocations from "@/lib/geo/argentina-locations.json";
@@ -70,8 +71,8 @@ function activeAttentionLabel(state?: ReceptionPatient["estadoAtencionEnCurso"])
   const labels: Partial<Record<NonNullable<ReceptionPatient["estadoAtencionEnCurso"]>, string>> = {
     PENDIENTE: "Pendiente",
     HOSPITAL_SELECCIONADO: "Hospital seleccionado",
-    PRETRIAGE_EN_PROCESO: "Pretriaje en proceso",
-    PRETRIAGE_FINALIZADO: "Pretriaje finalizado",
+    PRETRIAGE_EN_PROCESO: "Pretriage en proceso",
+    PRETRIAGE_FINALIZADO: "Pretriage finalizado",
     EN_COLA: "En cola",
     LLAMADO: "Paciente llamado",
     EN_ESPERA: "En espera",
@@ -139,12 +140,14 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
   const painFields = useFieldArray({ control: clinicalForm.control, name: "dolores" });
   const clinicalDraft = useWatch({ control: clinicalForm.control });
   const selectedProvince = useWatch({ control: patientForm.control, name: "provincia" });
-  const cityOptions = useMemo(
+  const province = useMemo(
     () => argentinaLocations.provinces.find((item) =>
       item.name.localeCompare(selectedProvince ?? "", "es-AR", { sensitivity: "base" }) === 0,
-    )?.cities ?? [],
+    ),
     [selectedProvince],
   );
+  const isCaba = province?.name === "Ciudad Autónoma de Buenos Aires";
+  const localityLabel = !selectedProvince ? "Localidad o barrio" : isCaba ? "Barrio" : "Localidad";
   const fechaMaxima = useMemo(() => obtenerHoyIso(), []);
   const dniForm = useForm<{ dni: string }>({ defaultValues: { dni: "" } });
 
@@ -341,7 +344,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
           <article className="stat-card"><span>Estado</span><strong className="status-ok">Activa</strong></article>
         </div>
         <section className="panel">
-          <div className="panel-heading"><div><h2>Admisiones en curso</h2><p>Los borradores clínicos se conservan sólo en este dispositivo.</p></div></div>
+          <div className="panel-heading"><div><h2>Admisiones en curso</h2><p>Los borradores clínicos se conservan solo en este dispositivo.</p></div></div>
           {bootstrap.data.openAdmissions.length ? (
             <div className="record-list">
               {bootstrap.data.openAdmissions.map((open) => (
@@ -372,7 +375,8 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
         <Progress active={0} />
         <header className="page-heading"><p className="eyebrow">Nueva admisión</p><h1>Buscar paciente</h1><p>Usá el DNI físico para encontrar o registrar al paciente.</p></header>
         <form className="panel form-panel" onSubmit={dniForm.handleSubmit(submitDni)}>
-          <label className="field"><span>DNI</span><input autoFocus inputMode="numeric" placeholder="Ej. 12345678" {...dniForm.register("dni")} /><FieldError message={dniForm.formState.errors.dni?.message} /></label>
+          <RequiredFieldsNote />
+          <label className="field"><RequiredLabel>DNI</RequiredLabel><input aria-required="true" autoFocus inputMode="numeric" placeholder="Ej. 12345678" {...dniForm.register("dni")} /><FieldError message={dniForm.formState.errors.dni?.message} /></label>
           <div className="form-actions">
             <button className="button button-secondary" type="button" onClick={resetFlow}>Cancelar</button>
             <button className="button button-primary" disabled={searchPatient.isPending} type="submit">{searchPatient.isPending ? "Buscando…" : "Buscar paciente"}</button>
@@ -394,6 +398,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
           <p>{patient ? "Verificá los datos antes de crear la admisión." : `No encontramos coincidencias para el DNI ${searchedDni}.`}</p>
         </header>
         <form className="panel form-panel" onSubmit={patientForm.handleSubmit(submitPatient)}>
+          <RequiredFieldsNote />
           {patient?.atencionEnCurso ? (
             <div className="notice notice-warning" role="alert">
               Este paciente ya tiene una atención en curso: <strong>{activeAttentionLabel(patient.estadoAtencionEnCurso)}</strong>.
@@ -401,19 +406,48 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
             </div>
           ) : null}
           <div className="form-grid">
-            <label className="field"><span>DNI</span><input readOnly {...patientForm.register("dni")} /><FieldError message={patientForm.formState.errors.dni?.message} /></label>
-            <label className="field"><span>Especialidad</span><select {...patientForm.register("codigoEspecialidad")}><option value="">Seleccionar</option>{specialties.map((item) => <option key={item.codigo} value={item.codigo}>{item.nombre}</option>)}</select><FieldError message={patientForm.formState.errors.codigoEspecialidad?.message} /></label>
-            <label className="field"><span>Nombre</span><input {...patientForm.register("nombre")} /><FieldError message={patientForm.formState.errors.nombre?.message} /></label>
-            <label className="field"><span>Apellido</span><input {...patientForm.register("apellido")} /><FieldError message={patientForm.formState.errors.apellido?.message} /></label>
-            <label className="field"><span>Fecha de nacimiento</span><input type="date" max={fechaMaxima} {...patientForm.register("fechaNacimiento")} /><FieldError message={patientForm.formState.errors.fechaNacimiento?.message} /></label>
-            <label className="field"><span>Género biológico</span><select {...patientForm.register("generoBiologico")}><option value="FEMENINO">Femenino</option><option value="MASCULINO">Masculino</option><option value="X">X / No especificado</option></select></label>
-            <label className="field"><span>Teléfono</span><input {...patientForm.register("telefono")} /><FieldError message={patientForm.formState.errors.telefono?.message} /></label>
-            <label className="field"><span>Correo electrónico (opcional)</span><input type="email" {...patientForm.register("correoElectronico")} /><FieldError message={patientForm.formState.errors.correoElectronico?.message} /></label>
-            <label className="field field-wide"><span>Calle</span><input {...patientForm.register("calle")} /><FieldError message={patientForm.formState.errors.calle?.message} /></label>
-            <label className="field"><span>Altura</span><input {...patientForm.register("alturaDomicilio")} /><FieldError message={patientForm.formState.errors.alturaDomicilio?.message} /></label>
-            <label className="field"><span>Piso (opcional)</span><input {...patientForm.register("piso")} /></label>
-            <label className="field"><span>Provincia</span><Controller control={patientForm.control} name="provincia" render={({ field }) => <SearchableCombobox value={field.value} options={argentinaLocations.provinces.map((item) => item.name)} onChange={(value) => { field.onChange(value); patientForm.setValue("ciudad", "", { shouldDirty: true }); }} />} /><FieldError message={patientForm.formState.errors.provincia?.message} /></label>
-            <label className="field"><span>Ciudad</span><Controller control={patientForm.control} name="ciudad" render={({ field }) => <SearchableCombobox value={field.value} options={cityOptions} disabled={!selectedProvince} placeholder={selectedProvince ? "Buscar localidad" : "Seleccioná primero una provincia"} onChange={field.onChange} />} /><FieldError message={patientForm.formState.errors.ciudad?.message} /></label>
+            <label className="field"><RequiredLabel>DNI</RequiredLabel><input aria-required="true" readOnly {...patientForm.register("dni")} /><FieldError message={patientForm.formState.errors.dni?.message} /></label>
+            <label className="field"><RequiredLabel>Especialidad</RequiredLabel><select aria-required="true" {...patientForm.register("codigoEspecialidad")}><option value="">Seleccionar</option>{specialties.map((item) => <option key={item.codigo} value={item.codigo}>{item.nombre}</option>)}</select><FieldError message={patientForm.formState.errors.codigoEspecialidad?.message} /></label>
+            <label className="field"><RequiredLabel>Nombre</RequiredLabel><input aria-required="true" {...patientForm.register("nombre")} /><FieldError message={patientForm.formState.errors.nombre?.message} /></label>
+            <label className="field"><RequiredLabel>Apellido</RequiredLabel><input aria-required="true" {...patientForm.register("apellido")} /><FieldError message={patientForm.formState.errors.apellido?.message} /></label>
+            <label className="field"><RequiredLabel>Fecha de nacimiento</RequiredLabel><input aria-required="true" type="date" max={fechaMaxima} {...patientForm.register("fechaNacimiento")} /><FieldError message={patientForm.formState.errors.fechaNacimiento?.message} /></label>
+            <label className="field"><RequiredLabel>Género biológico</RequiredLabel><select aria-required="true" {...patientForm.register("generoBiologico")}><option value="FEMENINO">Femenino</option><option value="MASCULINO">Masculino</option><option value="X">X / No especificado</option></select></label>
+            <label className="field"><RequiredLabel>Teléfono</RequiredLabel><input aria-required="true" {...patientForm.register("telefono")} /><FieldError message={patientForm.formState.errors.telefono?.message} /></label>
+            <label className="field"><span>Correo electrónico</span><input type="email" {...patientForm.register("correoElectronico")} /><FieldError message={patientForm.formState.errors.correoElectronico?.message} /></label>
+            <label className="field field-wide"><RequiredLabel>Calle</RequiredLabel><input aria-required="true" {...patientForm.register("calle")} /><FieldError message={patientForm.formState.errors.calle?.message} /></label>
+            <label className="field"><RequiredLabel>Altura</RequiredLabel><input aria-required="true" {...patientForm.register("alturaDomicilio")} /><FieldError message={patientForm.formState.errors.alturaDomicilio?.message} /></label>
+            <label className="field"><span>Piso</span><input {...patientForm.register("piso")} /></label>
+            <div className="field">
+              <label htmlFor="reception-province"><RequiredLabel>Provincia</RequiredLabel></label>
+              <Controller control={patientForm.control} name="provincia" render={({ field }) => (
+                <SearchableCombobox
+                  id="reception-province"
+                  required
+                  value={field.value}
+                  options={argentinaLocations.provinces.map((item) => item.name)}
+                  onChange={(value) => {
+                    field.onChange(value);
+                    patientForm.setValue("ciudad", "", { shouldDirty: true });
+                  }}
+                />
+              )} />
+              <FieldError message={patientForm.formState.errors.provincia?.message} />
+            </div>
+            <div className="field">
+              <label htmlFor="reception-locality"><RequiredLabel>{localityLabel}</RequiredLabel></label>
+              <Controller control={patientForm.control} name="ciudad" render={({ field }) => (
+                <SearchableCombobox
+                  id="reception-locality"
+                  required
+                  value={field.value}
+                  options={province?.cities ?? []}
+                  disabled={!selectedProvince}
+                  placeholder={!selectedProvince ? "Seleccioná primero una provincia" : isCaba ? "Buscar barrio" : "Buscar localidad"}
+                  onChange={field.onChange}
+                />
+              )} />
+              <FieldError message={patientForm.formState.errors.ciudad?.message} />
+            </div>
           </div>
           <div className="form-actions">
             <button className="button button-secondary" type="button" onClick={() => setStage("search")}>Volver</button>
@@ -456,11 +490,12 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
             setStage("review");
           })}
         >
+          <RequiredFieldsNote />
           <div className="form-grid">
-            <label className="field field-wide"><span>Motivo principal</span><textarea rows={3} placeholder="Ej. Dolor de cabeza leve desde esta mañana" {...clinicalForm.register("motivoConsulta")} /><small className="field-help">Relato breve en palabras del paciente. No hace falta repetirlo en otros síntomas.</small><FieldError message={clinicalForm.formState.errors.motivoConsulta?.message} /></label>
-            <label className="field field-wide"><span>Otros síntomas (opcional)</span><input placeholder="Ej. náuseas, mareos" {...clinicalForm.register("sintomas")} /><small className="field-help">Separalos con comas.</small><FieldError message={clinicalForm.formState.errors.sintomas?.message} /></label>
-            <label className="field"><span>Inicio</span><input placeholder="Ej. hace 2 horas" {...clinicalForm.register("inicio")} /><FieldError message={clinicalForm.formState.errors.inicio?.message} /></label>
-            <label className="field"><span>Evolución</span><select {...clinicalForm.register("evolucion")}><option value="">Seleccionar</option><option value="empeora">Empeora</option><option value="estable">Se mantiene</option><option value="mejora">Mejora</option></select><FieldError message={clinicalForm.formState.errors.evolucion?.message} /></label>
+            <label className="field field-wide"><RequiredLabel>Motivo principal</RequiredLabel><textarea aria-required="true" rows={3} placeholder="Ej. dolor de cabeza leve desde esta mañana" {...clinicalForm.register("motivoConsulta")} /><small className="field-help">Relato breve en palabras del paciente. No hace falta repetirlo en otros síntomas.</small><FieldError message={clinicalForm.formState.errors.motivoConsulta?.message} /></label>
+            <label className="field field-wide"><span>Otros síntomas</span><input placeholder="Ej. náuseas, mareos" {...clinicalForm.register("sintomas")} /><small className="field-help">Separalos con comas.</small><FieldError message={clinicalForm.formState.errors.sintomas?.message} /></label>
+            <label className="field"><RequiredLabel>Inicio</RequiredLabel><input aria-required="true" placeholder="Ej. hace 2 horas" {...clinicalForm.register("inicio")} /><FieldError message={clinicalForm.formState.errors.inicio?.message} /></label>
+            <label className="field"><RequiredLabel>Evolución</RequiredLabel><select aria-required="true" {...clinicalForm.register("evolucion")}><option value="">Seleccionar</option><option value="empeora">Empeora</option><option value="estable">Se mantiene</option><option value="mejora">Mejora</option></select><FieldError message={clinicalForm.formState.errors.evolucion?.message} /></label>
             <section className="pain-section field-wide" aria-labelledby="pain-title">
               <div className="pain-heading">
                 <div><h2 id="pain-title">Dolores referidos</h2><p>Agregá uno por cada zona dolorosa. Si no refiere dolor, dejalo vacío.</p></div>
@@ -469,8 +504,8 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
               {painFields.fields.length ? <div className="pain-list">
                 {painFields.fields.map((field, index) => (
                   <div className="pain-card" key={field.id}>
-                    <label className="field"><span>Localización</span><input placeholder="Ej. cabeza, abdomen, espalda" {...clinicalForm.register(`dolores.${index}.localizacion`)} /><FieldError message={clinicalForm.formState.errors.dolores?.[index]?.localizacion?.message} /></label>
-                    <label className="field"><span>Intensidad (0–10)</span><input inputMode="numeric" max="10" min="0" type="number" {...clinicalForm.register(`dolores.${index}.intensidad`)} /><FieldError message={clinicalForm.formState.errors.dolores?.[index]?.intensidad?.message} /></label>
+                    <label className="field"><RequiredLabel>Localización</RequiredLabel><input aria-required="true" placeholder="Ej. cabeza, abdomen, espalda" {...clinicalForm.register(`dolores.${index}.localizacion`)} /><FieldError message={clinicalForm.formState.errors.dolores?.[index]?.localizacion?.message} /></label>
+                    <label className="field"><RequiredLabel>Intensidad (0–10)</RequiredLabel><input aria-required="true" inputMode="numeric" max="10" min="0" type="number" {...clinicalForm.register(`dolores.${index}.intensidad`)} /><FieldError message={clinicalForm.formState.errors.dolores?.[index]?.intensidad?.message} /></label>
                     <button className="pain-remove" type="button" onClick={() => painFields.remove(index)} aria-label={`Quitar dolor ${index + 1}`}>Quitar</button>
                   </div>
                 ))}
@@ -484,7 +519,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
             <label className="field"><span>Posibilidad de embarazo</span><select {...clinicalForm.register("posibilidadEmbarazo")}><option value="">No informado / no aplica</option><option value="si">Sí</option><option value="no">No</option><option value="no sabe">No sabe</option></select></label>
             <label className="field"><span>Observaciones</span><input {...clinicalForm.register("observaciones")} /></label>
           </div>
-          <div className="notice notice-info">El borrador se guarda sólo en este dispositivo y se elimina al finalizar o cancelar.</div>
+          <div className="notice notice-info">El borrador se guarda solo en este dispositivo y se elimina al finalizar o cancelar.</div>
           <div className="form-actions">
             <button
               className="button button-danger-ghost"
@@ -520,7 +555,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
             </dl>
           </article>
           <aside className="panel decision-card">
-            <span className="decision-icon" aria-hidden="true">AI</span>
+            <span className="decision-icon" aria-hidden="true">IA</span>
             <h2>Clasificación automática</h2>
             <p>Al finalizar, el sistema evaluará el formulario completo y ubicará al paciente en la cola.</p>
             <div className="notice notice-info">Verificá que la información coincida con lo expresado por el paciente.</div>

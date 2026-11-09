@@ -3,6 +3,7 @@
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 import { apiClient } from "@/lib/api/client";
 
 type Step = "email" | "token" | "password" | "success";
@@ -142,8 +143,9 @@ export function PasswordResetFlow() {
 
       {step === "email" ? (
         <form className="login-form" onSubmit={submitEmail}>
+          <RequiredFieldsNote />
           <label className="field">
-            Correo electrónico
+            <RequiredLabel>Correo electrónico</RequiredLabel>
             <input
               autoComplete="email"
               defaultValue={email}
@@ -170,11 +172,12 @@ export function PasswordResetFlow() {
 
       {step === "token" ? (
         <form className="login-form" onSubmit={submitToken}>
+          <RequiredFieldsNote />
           <div className="notice notice-info" role="status">
             Revisá tu bandeja de entrada y correo no deseado.
           </div>
           <label className="field">
-            Token de verificación
+            <RequiredLabel>Token de verificación</RequiredLabel>
             <input
               autoCapitalize="none"
               autoComplete="one-time-code"
@@ -221,8 +224,9 @@ export function PasswordResetFlow() {
 
       {step === "password" ? (
         <form className="login-form" onSubmit={submitPassword}>
+          <RequiredFieldsNote />
           <label className="field">
-            Nueva contraseña
+            <RequiredLabel>Nueva contraseña</RequiredLabel>
             <input
               autoComplete="new-password"
               disabled={resetPassword.isPending}
@@ -238,7 +242,7 @@ export function PasswordResetFlow() {
             </small>
           </label>
           <label className="field">
-            Confirmá la contraseña
+            <RequiredLabel>Confirmá la contraseña</RequiredLabel>
             <input
               autoComplete="new-password"
               disabled={resetPassword.isPending}

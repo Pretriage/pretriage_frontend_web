@@ -18,14 +18,14 @@ type Body = Record<string, unknown> & { operation?: string };
 
 function numberValue(value: unknown, field: string) {
   if (typeof value !== "number" || !Number.isSafeInteger(value)) {
-    throw new TypeError(`${field} inválido`);
+    throw new TypeError(`${field} inválido.`);
   }
   return value;
 }
 
 function credentialValue(value: unknown): CreatePatientCredential {
   if (!value || typeof value !== "object") {
-    throw new TypeError("Credencial inválida");
+    throw new TypeError("Credencial inválida.");
   }
   const credential = value as Record<string, unknown>;
   const nombreObraSocial = credential.nombreObraSocial;
@@ -38,7 +38,7 @@ function credentialValue(value: unknown): CreatePatientCredential {
     typeof plan !== "string" ||
     typeof fechaVencimiento !== "string"
   ) {
-    throw new TypeError("Credencial inválida");
+    throw new TypeError("Credencial inválida.");
   }
   return { nombreObraSocial, numeroAfiliado, plan, fechaVencimiento };
 }
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       case "searchPatient": {
         const sessionId = numberValue(body.sessionId, "sessionId");
         const dni = typeof body.dni === "string" ? body.dni.replace(/\D/g, "") : "";
-        if (!/^\d{7,8}$/.test(dni)) throw new TypeError("DNI inválido");
+        if (!/^\d{7,8}$/.test(dni)) throw new TypeError("DNI inválido.");
         return NextResponse.json(
           await backendRequest<ReceptionPatient>(
             `/api/recepcion/pacientes/${dni}?sesionId=${sessionId}`,

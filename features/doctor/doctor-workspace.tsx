@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 import { StaffShell } from "@/components/staff-shell";
 import { apiClient } from "@/lib/api/client";
 import { NIVELES_GRAVEDAD_BOT, nivelGravedadClass, nivelGravedadLabel } from "@/lib/severity";
@@ -301,9 +302,10 @@ export function DoctorWorkspace({
           <p>Vas a atender en <strong>{activeHospitalName}</strong>. Seleccioná tu especialidad, sector y consultorio.</p>
         </header>
         <section className="panel form-panel">
+          <RequiredFieldsNote />
           <label className="field">
-            <span>Especialidad</span>
-            <select value={assignmentKey} onChange={(event) => { setAssignmentKey(event.target.value); setSectorId(""); setRoomId(""); }}>
+            <RequiredLabel>Especialidad</RequiredLabel>
+            <select required value={assignmentKey} onChange={(event) => { setAssignmentKey(event.target.value); setSectorId(""); setRoomId(""); }}>
               <option value="">Seleccionar</option>
               {assignments.map((item) => (
                 <option key={item.codigoEspecialidad} value={item.codigoEspecialidad}>
@@ -318,27 +320,27 @@ export function DoctorWorkspace({
             </div>
           ) : null}
           <label className="field">
-            <span>Sector</span>
-            <select disabled={!selectedAssignment || sectors.isFetching || !sectors.data?.length} value={sectorId} onChange={(event) => { setSectorId(event.target.value); setRoomId(""); }}>
+            <RequiredLabel>Sector</RequiredLabel>
+            <select required disabled={!selectedAssignment || sectors.isFetching || !sectors.data?.length} value={sectorId} onChange={(event) => { setSectorId(event.target.value); setRoomId(""); }}>
               <option value="">{!selectedAssignment ? "Elegí una especialidad primero" : sectors.isFetching ? "Cargando…" : "Seleccionar"}</option>
               {(sectors.data ?? []).map((sector) => <option key={sector.id} value={sector.id}>{sector.nombre}</option>)}
             </select>
           </label>
           {selectedAssignment && !sectors.isPending && sectors.data?.length === 0 ? (
-            <div className="notice notice-warning">No hay sectores activos para esta especialidad en {activeHospitalName}. Consultá con administración del hospital.</div>
+            <div className="notice notice-warning">No hay sectores activos para esta especialidad en {activeHospitalName}. Consultá con la administración del hospital.</div>
           ) : null}
           <label className="field">
-            <span>Consultorio</span>
-            <select disabled={!selectedSector || rooms.isFetching || !rooms.data?.length} value={roomId} onChange={(event) => setRoomId(event.target.value)}>
+            <RequiredLabel>Consultorio</RequiredLabel>
+            <select required disabled={!selectedSector || rooms.isFetching || !rooms.data?.length} value={roomId} onChange={(event) => setRoomId(event.target.value)}>
               <option value="">{!selectedSector ? "Elegí un sector primero" : rooms.isFetching ? "Cargando…" : "Seleccionar"}</option>
               {(rooms.data ?? []).map((room) => <option key={room.id} value={room.id}>{room.nombre}</option>)}
             </select>
           </label>
           {selectedSector && !rooms.isPending && rooms.data?.length === 0 ? (
-            <div className="notice notice-warning">No hay consultorios activos en {selectedSector.nombre} para esta especialidad. Consultá con administración del hospital.</div>
+            <div className="notice notice-warning">No hay consultorios activos en {selectedSector.nombre} para esta especialidad. Consultá con la administración del hospital.</div>
           ) : null}
           <div className="notice notice-info">
-            Sólo se mostrarán pacientes de {activeHospitalName}, para la especialidad, el sector y el consultorio seleccionados.
+            Solo se mostrarán pacientes de {activeHospitalName} para la especialidad, el sector y el consultorio seleccionados.
           </div>
           <button className="button button-primary button-wide" disabled={!selectedAssignment || !selectedSector || !selectedRoom || startSession.isPending} onClick={() => startSession.mutate()}>
             {startSession.isPending ? "Iniciando…" : "Iniciar sesión"}
@@ -370,7 +372,7 @@ export function DoctorWorkspace({
           ) : (
             <>
               {pretriage.isPending ? (
-                <div className="loading-card">Cargando resumen de pretriaje…</div>
+                <div className="loading-card">Cargando resumen de pretriage…</div>
               ) : pretriage.data ? (
                 <section className="priority-review" aria-labelledby="priority-review-title">
                   <div className="priority-review-heading">
@@ -430,9 +432,10 @@ export function DoctorWorkspace({
                     </div>
                   ) : editingPriority ? (
                     <div className="priority-correction">
+                      <RequiredFieldsNote />
                       <label className="field">
-                        <span>{partialWithoutAiSummary ? "Prioridad clínica que vas a asignar" : "Nueva prioridad"}</span>
-                        <select value={correctedPriority} onChange={(event) => setCorrectedPriority(event.target.value)}>
+                        <RequiredLabel>{partialWithoutAiSummary ? "Prioridad clínica que vas a asignar" : "Nueva prioridad"}</RequiredLabel>
+                        <select required value={correctedPriority} onChange={(event) => setCorrectedPriority(event.target.value)}>
                           <option value="">Seleccionar</option>
                           {NIVELES_GRAVEDAD_BOT.map((priority) => (
                             <option key={priority} value={priority} disabled={priority === pretriage.data.prioridadPreliminar}>
@@ -442,7 +445,7 @@ export function DoctorWorkspace({
                         </select>
                       </label>
                       <label className="field">
-                        <span>Motivo breve <small>(opcional)</small></span>
+                        <span>Motivo breve</span>
                         <textarea rows={2} maxLength={500} value={priorityReason} onChange={(event) => setPriorityReason(event.target.value)} placeholder="Ej.: la evaluación clínica no muestra signos de alarma" />
                       </label>
                       <div className="priority-actions">
@@ -494,7 +497,7 @@ export function DoctorWorkspace({
         <article className="stat-card"><span>Sesión</span><strong className={session.estado === "ACTIVA" ? "status-ok" : "status-paused"}>{session.estado}</strong></article>
       </div>
       <section className="panel">
-        <div className="panel-heading"><div><h2>Próximos llamados</h2><p>Se muestra sólo la información disponible y autorizada por el contrato actual.</p></div></div>
+        <div className="panel-heading"><div><h2>Próximos llamados</h2><p>Se muestra solo la información disponible y autorizada por el contrato actual.</p></div></div>
         {queue.isPending ? <div className="loading-card">Actualizando cola…</div> : null}
         {queue.data?.length ? (
           <div className="queue-table" role="table" aria-label="Cola médica">

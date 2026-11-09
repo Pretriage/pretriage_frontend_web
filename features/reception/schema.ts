@@ -54,7 +54,7 @@ export const patientSchema = z.object({
   calle: z.string().trim().min(1, "Ingresá la calle."),
   alturaDomicilio: z.string().trim().min(1, "Ingresá la altura."),
   piso: z.string(),
-  ciudad: z.string().trim().min(1, "Ingresá la ciudad."),
+  ciudad: z.string().trim().min(1, "Ingresá la localidad o el barrio."),
   provincia: z.string().trim().min(1, "Ingresá la provincia."),
   codigoEspecialidad: z.string().min(1, "Seleccioná una especialidad."),
 });

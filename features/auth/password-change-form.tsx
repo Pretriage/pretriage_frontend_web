@@ -2,6 +2,7 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useRef, useState } from "react";
+import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 import {
   isNewPasswordValid,
   passwordRules,
@@ -111,8 +112,9 @@ export function PasswordChangeForm() {
 
   return (
     <form className="login-form password-change-form" onSubmit={submit}>
+      <RequiredFieldsNote />
       <label className="field">
-        Contraseña actual
+        <RequiredLabel>Contraseña actual</RequiredLabel>
         <input
           autoComplete="current-password"
           disabled={pending || blocked}
@@ -131,7 +133,7 @@ export function PasswordChangeForm() {
       </label>
 
       <div className="field password-change-field">
-        <label htmlFor="password-new">Contraseña nueva</label>
+        <label htmlFor="password-new"><RequiredLabel>Contraseña nueva</RequiredLabel></label>
         <input
           aria-describedby="password-change-rules"
           autoComplete="new-password"
@@ -173,7 +175,7 @@ export function PasswordChangeForm() {
       </div>
 
       <label className="field">
-        Repetí la contraseña nueva
+        <RequiredLabel>Repetí la contraseña nueva</RequiredLabel>
         <input
           autoComplete="new-password"
           disabled={pending || blocked}

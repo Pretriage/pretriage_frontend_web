@@ -6,7 +6,7 @@ import { z } from "zod";
 type Body = Record<string, unknown> & { operation?: string; hospitalId?: number };
 
 function id(value: unknown, name: string) {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) throw new TypeError(`${name} inválido`);
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) throw new TypeError(`${name} inválido.`);
   return value;
 }
 

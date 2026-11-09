@@ -132,14 +132,13 @@ textarea:focus-visible {
 
 .inline-invite-form {
   display: flex;
+  align-items: end;
+  flex-wrap: wrap;
   gap: 9px;
 }
 
-.inline-invite-form input {
-  min-width: 240px;
-  padding: 10px 12px;
-  border: 1px solid #cdd7e4;
-  border-radius: 9px;
+.inline-invite-form .field {
+  min-width: min(240px, 100%);
 }
 
 .workspace-shell {
@@ -1195,6 +1194,18 @@ textarea:focus-visible {
 
 .field-wide {
   grid-column: 1 / -1;
+}
+
+span.required-mark {
+  color: var(--red);
+}
+
+.required-fields-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: .77rem;
+  text-align: start;
 }
 
 .field input,

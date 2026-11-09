@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Brand } from "@/components/brand";
+import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 
 const STRONG_PASSWORD = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/;
 
@@ -56,7 +57,52 @@ export function InvitationAcceptance({ loggedIn }: { loggedIn: boolean }) {
     {summary.data ? <>
       <h1>{summary.data.hospitalNombre}</h1><p className="muted">Invitación para <strong>{summary.data.email}</strong></p>
       <div className="summary-list"><div><dt>Roles</dt><dd>{summary.data.roles.join(", ")}</dd></div><div><dt>Vence</dt><dd>{new Date(summary.data.venceEn).toLocaleString("es-AR")}</dd></div>{summary.data.matricula ? <div><dt>Matrícula</dt><dd>{summary.data.tipoMatricula?.toLocaleLowerCase("es")} {summary.data.matricula} · {summary.data.jurisdiccionMatricula}</dd></div> : null}</div>
-      {summary.data.cuentaExistente ? loggedIn ? <button className="button button-primary button-wide" disabled={accept.isPending} onClick={() => accept.mutate()}>{accept.isPending ? "Aceptando…" : "Aceptar invitación"}</button> : <div style={{ display: "grid", gap: "12px" }}><div className="notice notice-info">Iniciá sesión en otra pestaña, volvé a abrir el enlace y aceptá con tu cuenta existente.</div><a className="button button-primary button-wide" href="/login" target="_blank" rel="noreferrer">Iniciar sesión</a></div> : registered ? <div className="notice notice-success">La cuenta y la membresía quedaron creadas. Ya podés iniciar sesión.</div> : <form className="login-form" onSubmit={submitRegistration}><label className="field">Nombre<input name="nombre" required /></label><label className="field">Apellido<input name="apellido" required /></label><label className="field">DNI<input name="numeroDocumento" inputMode="numeric" required pattern="[0-9]{7,8}" /></label><label className="field">Elegí una contraseña<input name="password" type="password" autoComplete="new-password" required minLength={8} maxLength={72} onChange={() => passwordError && setPasswordError(null)} /><small className="field-help">Entre 8 y 72 caracteres, con mayúscula, minúscula, número y símbolo.</small></label><label className="field">Confirmá la contraseña<input name="passwordConfirmation" type="password" autoComplete="new-password" required minLength={8} maxLength={72} onChange={() => passwordError && setPasswordError(null)} />{passwordError ? <span className="field-error" role="alert">{passwordError}</span> : null}</label><button className="button button-primary" disabled={register.isPending} type="submit">{register.isPending ? "Creando cuenta…" : "Crear cuenta y aceptar"}</button></form>}
+      {summary.data.cuentaExistente ? loggedIn ? <button className="button button-primary button-wide" disabled={accept.isPending} onClick={() => accept.mutate()}>{accept.isPending ? "Aceptando…" : "Aceptar invitación"}</button> : <div style={{ display: "grid", gap: "12px" }}><div className="notice notice-info">Iniciá sesión en otra pestaña, volvé a abrir el enlace y aceptá con tu cuenta existente.</div><a className="button button-primary button-wide" href="/login" target="_blank" rel="noreferrer">Iniciar sesión</a></div> : registered ? <div className="notice notice-success">La cuenta y la membresía quedaron creadas. Ya podés iniciar sesión.</div> : (
+        <form className="login-form" onSubmit={submitRegistration}>
+          <RequiredFieldsNote />
+          <label className="field">
+            <RequiredLabel>Nombre</RequiredLabel>
+            <input name="nombre" required />
+          </label>
+          <label className="field">
+            <RequiredLabel>Apellido</RequiredLabel>
+            <input name="apellido" required />
+          </label>
+          <label className="field">
+            <RequiredLabel>DNI</RequiredLabel>
+            <input name="numeroDocumento" inputMode="numeric" required pattern="[0-9]{7,8}" />
+          </label>
+          <label className="field">
+            <RequiredLabel>Elegí una contraseña</RequiredLabel>
+            <input
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              required
+              minLength={8}
+              maxLength={72}
+              onChange={() => passwordError && setPasswordError(null)}
+            />
+            <small className="field-help">Entre 8 y 72 caracteres, con mayúscula, minúscula, número y símbolo.</small>
+          </label>
+          <label className="field">
+            <RequiredLabel>Confirmá la contraseña</RequiredLabel>
+            <input
+              name="passwordConfirmation"
+              type="password"
+              autoComplete="new-password"
+              required
+              minLength={8}
+              maxLength={72}
+              onChange={() => passwordError && setPasswordError(null)}
+            />
+            {passwordError ? <span className="field-error" role="alert">{passwordError}</span> : null}
+          </label>
+          <button className="button button-primary" disabled={register.isPending} type="submit">
+            {register.isPending ? "Creando cuenta…" : "Crear cuenta y aceptar"}
+          </button>
+        </form>
+      )}
       {accept.error || register.error ? <div className="notice notice-error" role="alert">{(accept.error ?? register.error)?.message}</div> : null}
     </> : null}
   </section></main>;

@@ -3,18 +3,20 @@
 import { useId, useMemo, useState, type KeyboardEvent } from "react";
 
 type Props = {
+  id: string;
   value: string;
   options: readonly string[];
   onChange: (value: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  required?: boolean;
 };
 
 function normalized(value: string) {
   return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLocaleLowerCase("es-AR");
 }
 
-export function SearchableCombobox({ value, options, onChange, disabled, placeholder }: Props) {
+export function SearchableCombobox({ id, value, options, onChange, disabled, placeholder, required }: Props) {
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -65,8 +67,10 @@ export function SearchableCombobox({ value, options, onChange, disabled, placeho
         aria-autocomplete="list"
         aria-controls={listId}
         aria-expanded={open}
+        aria-required={required}
         autoComplete="off"
         disabled={disabled}
+        id={id}
         placeholder={placeholder}
         role="combobox"
         value={value}
