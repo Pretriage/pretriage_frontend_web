@@ -174,7 +174,8 @@ export function DoctorWorkspace({
   const called = current?.estadoConsulta === "LLAMADO";
   const inAttention = current?.estadoConsulta === "EN_ATENCION";
   const pretriageAvailable = Boolean(session?.id && current?.consultaId && (selected || called || inAttention));
-  const clinicalDataAvailable = pretriageAvailable && !called;
+  // Los datos clínicos y adjuntos se muestran en revisión, mientras el paciente está llamado y durante la atención.
+  const clinicalDataAvailable = pretriageAvailable;
   const assignments = useMemo(
     () => bootstrap.data?.assignments.filter((item) => item.hospitalId === hospitalId) ?? [],
     [bootstrap.data?.assignments, hospitalId],
