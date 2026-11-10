@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ReceptionTriageForm } from "@/lib/api/types";
 import { fechaIsoValida } from "@/lib/argentina-date";
 import { EDAD_MAXIMA_NACIMIENTO, rangoFechaNacimiento } from "./date-format";
+import { EMBARAZO_NO_APLICA } from "@/lib/embarazo";
 
 export const dniSchema = z.object({
   dni: z
@@ -116,6 +117,7 @@ export function restoreClinicalDraft(value: unknown): ClinicalFormValues {
 
 export function toTriageRequest(
   values: ClinicalFormValues,
+  embarazoAplica: boolean,
 ): ReceptionTriageForm {
   return {
     motivoConsulta: values.motivoConsulta.trim(),
@@ -126,7 +128,7 @@ export function toTriageRequest(
     antecedentesRelevantes: list(values.antecedentesRelevantes),
     medicamentos: list(values.medicamentos),
     alergias: list(values.alergias),
-    posibilidadEmbarazo: values.posibilidadEmbarazo.trim(),
+    posibilidadEmbarazo: embarazoAplica ? values.posibilidadEmbarazo.trim() : EMBARAZO_NO_APLICA,
     observaciones: values.observaciones.trim(),
   };
 }

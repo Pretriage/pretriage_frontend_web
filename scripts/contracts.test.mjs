@@ -158,6 +158,7 @@ test("recepción conserva síntomas de borradores anteriores sin enviar campos r
       if (specifier === "zod") return { z };
       if (specifier === "@/lib/argentina-date") return argentinaDate;
       if (specifier === "./date-format") return receptionDate;
+      if (specifier === "@/lib/embarazo") return loadTypeScript("lib/embarazo.ts");
       throw new Error(`Unexpected module: ${specifier}`);
     },
   });
@@ -176,12 +177,16 @@ test("recepción conserva síntomas de borradores anteriores sin enviar campos r
   assert.equal(restoreClinicalDraft(draft).sintomas, draft.sintomas);
   assert.equal(clinicalSchema.safeParse(draft).success, false);
 
-  const request = toTriageRequest(clinicalSchema.parse({ ...draft, evolucion: "estable" }));
+  const request = toTriageRequest(clinicalSchema.parse({ ...draft, evolucion: "estable" }), true);
   assert.deepEqual(Array.from(request.sintomas), ["Náuseas, fiebre", "Dificultad para respirar", "Dolor en abdomen (intensidad 8/10)"]);
   assert.deepEqual(Array.from(request.dolores), []);
   assert.deepEqual(Array.from(request.medicamentos), ["Medicación habitual"]);
   assert.equal("fiebre" in request, false);
   assert.equal("signosAlarma" in request, false);
+
+  const pregnant = clinicalSchema.parse({ ...draft, evolucion: "estable", posibilidadEmbarazo: "si" });
+  assert.equal(toTriageRequest(pregnant, true).posibilidadEmbarazo, "si");
+  assert.equal(toTriageRequest(pregnant, false).posibilidadEmbarazo, "no aplica");
 });
 
 test("apiClient acepta 204 vacío, JSON 200 y conserva el error 409", async () => {

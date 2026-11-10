@@ -36,9 +36,10 @@ import {
   type PatientAdmissionValues,
   type PatientFormValues,
 } from "@/features/reception/schema";
+import { aplicaEmbarazo } from "@/lib/embarazo";
 
 type Stage = "dashboard" | "search" | "patient" | "coverage" | "triage" | "review" | "done";
-type OpenAdmission = ReceptionAdmission & { patientName: string; coverage?: ReceptionCoverage | null };
+type OpenAdmission = ReceptionAdmission & { patientName: string; coverage?: ReceptionCoverage | null; generoBiologico?: string | null };
 const receptionApi = "/api/staff/reception";
 const provinceOptions = argentinaLocations.provinces.map(({ name }) => name);
 const genderOptions = [
@@ -74,6 +75,10 @@ function Progress({ active }: { active: number }) {
 
 function draftKey(id: number) {
   return `pretriage:reception-draft:${id}`;
+}
+
+function genderKey(id: number) {
+  return `pretriage:reception-gender:${id}`;
 }
 
 function priorityLabel(priority?: string) {
@@ -126,6 +131,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
   const [review, setReview] = useState<ClinicalFormValues | null>(null);
   const [result, setResult] = useState<ReceptionAdmission | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const embarazoAplica = aplicaEmbarazo(admission?.generoBiologico);
 
   const bootstrap = useQuery({
     queryKey: ["reception", "bootstrap"],
@@ -162,6 +168,13 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
     if (!admission?.id || stage !== "triage") return;
     sessionStorage.setItem(draftKey(admission.id), JSON.stringify(clinicalDraft));
   }, [admission?.id, clinicalDraft, stage]);
+
+  useEffect(() => {
+    // Si el paciente no es de género biológico femenino, no se conserva ningún dato de embarazo.
+    if (stage === "triage" && !embarazoAplica && clinicalForm.getValues("posibilidadEmbarazo")) {
+      clinicalForm.setValue("posibilidadEmbarazo", "");
+    }
+  }, [clinicalForm, embarazoAplica, stage]);
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["reception", "bootstrap"] });
@@ -218,7 +231,14 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
         admission: payload,
       }),
     onSuccess: (created, payload) => {
-      setAdmission({ ...created, patientName: `${payload.nombre} ${payload.apellido}`.trim() });
+      setAdmission({
+        ...created,
+        patientName: `${payload.nombre} ${payload.apellido}`.trim(),
+        generoBiologico: payload.generoBiologico,
+      });
+      if (created.id && payload.generoBiologico) {
+        sessionStorage.setItem(genderKey(created.id), payload.generoBiologico);
+      }
       clinicalForm.reset(emptyClinicalForm);
       setStage(created.pacienteId ? "coverage" : "triage");
       void refresh();
@@ -242,13 +262,16 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
     },
   });
   const finalizeAdmission = useMutation({
-    mutationFn: (data: { admissionId: number; values: ClinicalFormValues }) =>
+    mutationFn: (data: { admissionId: number; values: ClinicalFormValues; embarazoAplica: boolean }) =>
       apiClient<ReceptionAdmission>(receptionApi, "finalizeAdmission", {
         admissionId: data.admissionId,
-        form: toTriageRequest(data.values),
+        form: toTriageRequest(data.values, data.embarazoAplica),
       }),
     onSuccess: (finalized) => {
-      if (finalized.id) sessionStorage.removeItem(draftKey(finalized.id));
+      if (finalized.id) {
+        sessionStorage.removeItem(draftKey(finalized.id));
+        sessionStorage.removeItem(genderKey(finalized.id));
+      }
       setResult(finalized);
       setStage("done");
       void refresh();
@@ -260,7 +283,10 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
         admissionId,
       }),
     onSuccess: (cancelled) => {
-      if (cancelled.id) sessionStorage.removeItem(draftKey(cancelled.id));
+      if (cancelled.id) {
+        sessionStorage.removeItem(draftKey(cancelled.id));
+        sessionStorage.removeItem(genderKey(cancelled.id));
+      }
       resetFlow();
       void refresh();
     },
@@ -283,7 +309,20 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
       prioridad: open.prioridad, estimacion: open.estimacion,
       patientName: [open.pacienteNombre, open.pacienteApellido].filter(Boolean).join(" "),
       coverage: open.coberturaConfirmada ? open.cobertura ?? null : undefined,
+      generoBiologico: sessionStorage.getItem(genderKey(open.id)),
     });
+    if (!sessionStorage.getItem(genderKey(open.id)) && open.pacienteDni && open.sesionId) {
+      // Admisión retomada en otro dispositivo: se consulta el género biológico del paciente.
+      const admissionId = open.id;
+      void apiClient<ReceptionPatient>(receptionApi, "searchPatient", {
+        dni: open.pacienteDni,
+        sessionId: open.sesionId,
+      }).then((found) => {
+        if (!found.generoBiologico) return;
+        sessionStorage.setItem(genderKey(admissionId), found.generoBiologico);
+        setAdmission((current) => current?.id === admissionId ? { ...current, generoBiologico: found.generoBiologico } : current);
+      }).catch(() => undefined);
+    }
     const stored = sessionStorage.getItem(draftKey(open.id));
     try {
       clinicalForm.reset(stored ? restoreClinicalDraft(JSON.parse(stored)) : emptyClinicalForm);
@@ -603,6 +642,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
           onCancel={() => admission?.id && cancelAdmission.mutate(admission.id)}
           onEditCoverage={admission?.pacienteId ? () => setStage("coverage") : undefined}
           isCancelling={cancelAdmission.isPending}
+          showPregnancy={embarazoAplica}
         />
         <ErrorNotice error={cancelAdmission.error} />
       </div>,
@@ -619,7 +659,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
       ["Antecedentes relevantes", review.antecedentesRelevantes],
       ["Medicamentos", review.medicamentos],
       ["Alergias", review.alergias],
-      ["Posibilidad de embarazo", review.posibilidadEmbarazo === "si" ? "Sí" : review.posibilidadEmbarazo],
+      ["Posibilidad de embarazo", embarazoAplica ? (review.posibilidadEmbarazo === "si" ? "Sí" : review.posibilidadEmbarazo) : ""],
       ["Observaciones", review.observaciones],
     ];
     return shell(
@@ -645,7 +685,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
           <button
             className="button button-primary"
             disabled={finalizeAdmission.isPending}
-            onClick={() => admission?.id && finalizeAdmission.mutate({ admissionId: admission.id, values: review })}
+            onClick={() => admission?.id && finalizeAdmission.mutate({ admissionId: admission.id, values: review, embarazoAplica })}
           >{finalizeAdmission.isPending ? "Finalizando…" : "Finalizar admisión"}</button>
         </div>
         <ErrorNotice error={finalizeAdmission.error} />

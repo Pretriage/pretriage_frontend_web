@@ -13,14 +13,16 @@ export const EVOLUTION_LABELS = {
 
 const evolutionOptions = Object.entries(EVOLUTION_LABELS).map(([value, label]) => ({ value, label }));
 const pregnancyOptions = [
-  { value: "", label: "No informado / no aplica" },
+  { value: "", label: "No informado" },
   { value: "si", label: "Sí" },
   { value: "no", label: "No" },
   { value: "no sabe", label: "No sabe" },
 ];
 
-export function ReceptionClinicalForm({ form, onReview, onCancel, onEditCoverage, isCancelling }: {
+export function ReceptionClinicalForm({ form, onReview, onCancel, onEditCoverage, isCancelling, showPregnancy }: {
   form: UseFormReturn<ClinicalFormValues>;
+  /** Sólo se muestra para pacientes de género biológico femenino. */
+  showPregnancy: boolean;
   onReview: (values: ClinicalFormValues) => void;
   onCancel: () => void;
   onEditCoverage?: () => void;
@@ -99,17 +101,19 @@ export function ReceptionClinicalForm({ form, onReview, onCancel, onEditCoverage
           <label className="field field-wide"><span>Antecedentes relevantes</span><textarea rows={2} {...register("antecedentesRelevantes")} /></label>
           <label className="field"><span>Medicamentos</span><input {...register("medicamentos")} /></label>
           <label className="field"><span>Alergias</span><input {...register("alergias")} /></label>
-          <div className="field">
-            <label htmlFor="clinical-pregnancy">Posibilidad de embarazo</label>
-            <Controller control={control} name="posibilidadEmbarazo" render={({ field }) => (
-              <SearchableCombobox
-                {...field}
-                id="clinical-pregnancy"
-                options={pregnancyOptions}
-                placeholder="No informado / no aplica"
-              />
-            )} />
-          </div>
+          {showPregnancy ? (
+            <div className="field">
+              <label htmlFor="clinical-pregnancy">Posibilidad de embarazo</label>
+              <Controller control={control} name="posibilidadEmbarazo" render={({ field }) => (
+                <SearchableCombobox
+                  {...field}
+                  id="clinical-pregnancy"
+                  options={pregnancyOptions}
+                  placeholder="No informado"
+                />
+              )} />
+            </div>
+          ) : null}
           <label className="field field-wide"><span>Observaciones</span><textarea rows={2} {...register("observaciones")} /></label>
         </div>
       </details>

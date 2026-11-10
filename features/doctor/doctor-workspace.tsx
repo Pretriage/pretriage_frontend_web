@@ -7,6 +7,7 @@ import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 import { SearchableCombobox } from "@/components/searchable-combobox";
 import { StaffShell } from "@/components/staff-shell";
 import { apiClient } from "@/lib/api/client";
+import { aplicaEmbarazo, EMBARAZO_NO_APLICA } from "@/lib/embarazo";
 import { NIVELES_GRAVEDAD_BOT, nivelGravedadClass, nivelGravedadLabel } from "@/lib/severity";
 import type {
   ConsultationClinicalData,
@@ -63,8 +64,14 @@ function listText(value?: string[]) {
   return value?.length ? value.join(", ") : "No informado";
 }
 
-function PretriageSummary({ data, children, secondaryAction }: { data: ConsultationPretriage; children?: React.ReactNode; secondaryAction?: React.ReactNode }) {
+function PretriageSummary({ data, children, secondaryAction, generoBiologico }: { data: ConsultationPretriage; children?: React.ReactNode; secondaryAction?: React.ReactNode; generoBiologico?: string | null }) {
   const summary = data.resumenClinico;
+  // El embarazo sólo se muestra para pacientes de género biológico femenino.
+  // Si todavía no se conoce el género, se oculta cuando el dato indica que no aplica.
+  const embarazo = summary?.posibilidadEmbarazo?.trim();
+  const mostrarEmbarazo = Boolean(embarazo) && (generoBiologico
+    ? aplicaEmbarazo(generoBiologico)
+    : embarazo!.toLowerCase() !== EMBARAZO_NO_APLICA);
   return (
     <section className="priority-review" aria-labelledby="priority-review-title">
       <div className="priority-review-heading">
@@ -91,7 +98,7 @@ function PretriageSummary({ data, children, secondaryAction }: { data: Consultat
           {summary.antecedentesRelevantes?.length ? <div><dt>Antecedentes relevantes</dt><dd>{listText(summary.antecedentesRelevantes)}</dd></div> : null}
           {summary.medicamentos?.length ? <div><dt>Medicamentos declarados</dt><dd>{listText(summary.medicamentos)}</dd></div> : null}
           {summary.alergias?.length ? <div><dt>Alergias declaradas</dt><dd>{listText(summary.alergias)}</dd></div> : null}
-          {summary.posibilidadEmbarazo ? <div><dt>Posibilidad de embarazo</dt><dd>{summary.posibilidadEmbarazo}</dd></div> : null}
+          {mostrarEmbarazo ? <div><dt>Posibilidad de embarazo</dt><dd>{embarazo}</dd></div> : null}
           {summary.observaciones ? <div><dt>Observaciones</dt><dd>{summary.observaciones}</dd></div> : null}
         </dl>
       ) : data.cierreParcial ? (
@@ -625,6 +632,7 @@ export function DoctorWorkspace({
           ) : pretriageAvailable && pretriageData ? (
             <PretriageSummary
               data={pretriageData}
+              generoBiologico={clinicalData.data?.generoBiologico}
               secondaryAction={inAttention && (reviewPending || priorityView === "actions") ? discrepancyButton : null}
             >
               {priorityControls}
