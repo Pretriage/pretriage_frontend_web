@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { StaffShell } from "@/components/staff-shell";
 import { hoyIso } from "@/lib/argentina-date";
 import { HospitalMetricsPanel } from "@/features/admin/hospital-metrics-panel";
+import { HospitalAdminNavigation } from "@/features/admin/hospital-admin-navigation";
 import { getSession } from "@/lib/session";
 import { getStaffContext, staffDisplayName } from "@/lib/staff-context";
 import { hasMultipleHospitals } from "@/lib/workspace-routing";
@@ -32,10 +33,9 @@ export default async function HospitalMetricsPage({ searchParams }: { searchPara
   const desde = primerParametro(params.desde);
   const hasta = primerParametro(params.hasta);
   const hospitalIdSolicitado = hospitalIdParam ? Number(hospitalIdParam) : null;
-  const membership = Number.isSafeInteger(hospitalIdSolicitado)
-    ? context.membresias.find((item) =>
-      item.roles.includes("ADMIN_HOSPITAL") && item.hospitalId === hospitalIdSolicitado)
-    : undefined;
+  const adminMemberships = context.membresias.filter((item) =>
+    item.estado === "ACTIVA" && item.roles.includes("ADMIN_HOSPITAL"));
+  const membership = adminMemberships.find((item) => item.hospitalId === hospitalIdSolicitado);
 
   if (membership) {
     return (
@@ -57,18 +57,14 @@ export default async function HospitalMetricsPage({ searchParams }: { searchPara
 
   // Sin hospitalId: mensaje claro con el camino a Administración, sin redirect y sin llamadas.
   // Solo un admin hospitalario puede ver esta pantalla; cualquier otro rol vuelve al inicio.
-  const ownHospital = context.membresias.find((item) => item.roles.includes("ADMIN_HOSPITAL"));
+  const ownHospital = adminMemberships[0];
   if (!ownHospital) redirect("/");
   return (
     <StaffShell
       role="Administración"
       userName={userName}
       section="Personal"
-      sectionNavigation={(
-        <Link className="nav-item nav-subitem" href={`/admin/hospital?hospitalId=${ownHospital.hospitalId}`}>
-          <span className="nav-dot" aria-hidden="true" />Administración
-        </Link>
-      )}
+      sectionNavigation={<HospitalAdminNavigation hospitalId={ownHospital.hospitalId} activeSection="metricas" />}
       hospitalId={ownHospital.hospitalId}
       hospitalName={ownHospital.hospitalNombre}
       roles={ownHospital.roles}

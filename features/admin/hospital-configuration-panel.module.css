@@ -19,9 +19,71 @@
 .summary dd { margin: 0; font-size: .95rem; font-weight: 700; overflow-wrap: anywhere; }
 .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .actions > button { min-height: 44px; }
+.panelHeading { margin-bottom: 0; }
+
+.roomTotals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.roomTotals > div {
+  display: grid;
+  gap: 6px;
+  padding: 12px 16px;
+  border: 1px solid var(--soft-line);
+  border-radius: 12px;
+}
+
+.roomTotals dt, .hint, .muted { color: var(--muted); }
+.roomTotals dt { font-size: .82rem; font-weight: 650; }
+.roomTotals dd { margin: 0; font-size: 1.45rem; font-weight: 740; }
+.hint, .muted { font-size: .82rem; }
+.createSector { border: 1px solid var(--soft-line); border-radius: 12px; }
+.createSector > summary { padding: 12px 16px; }
+.createSector > form { margin: 0 12px 12px; }
+.inventorySection { display: grid; gap: 10px; }
+.inventorySection h3 { margin: 0; font-size: 1rem; }
+
+.tableFrame { border: 1px solid var(--line); border-radius: 12px; }
+.inventory { width: 100%; border-spacing: 0; table-layout: fixed; text-align: left; }
+.sectorTableFrame { overflow-x: auto; }
+.sectorInventory { min-width: 31rem; }
+.inventory th, .inventory td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--soft-line);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.inventory thead th { color: var(--muted); font-size: .8rem; }
+.inventory thead th:last-child,
+.inventory tbody td:last-child { text-align: center; }
+.inventory tbody:last-child tr:last-child > * { border-bottom: 0; }
+.sectorColumn { width: 24%; }
+.specialtyColumn { width: 22%; }
+.actionColumn { width: 9rem; }
+.sectorRow th > .muted { display: block; margin-top: 3px; font-weight: 500; }
+.sectorRow th { font-size: .9rem; font-weight: 650; }
+.sectorRow th > strong { font-weight: 690; }
+.inventory td > :global(.button) { min-width: 7rem; }
+.roomList { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.roomList > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-size: .85rem; }
+.roomOccupied { color: var(--blue-dark); font-size: .82rem; font-weight: 700; }
+.sectorEditor { display: grid; gap: 12px; }
+.inventoryEditor { padding: 14px; background: var(--canvas); border: 1px solid var(--line); border-radius: 12px; }
 
 @media (max-width: 460px) {
   .dialog { width: calc(100% - 20px); }
   .actions { display: grid; grid-template-columns: 1fr; }
   .actions > button { width: 100%; }
+  .roomTotals { gap: 5px; }
+  .roomTotals > div { padding: 8px; }
+  .roomTotals dt { font-size: .73rem; }
+  .inventory th, .inventory td { padding: 8px 6px; }
+  .inventory button { padding-inline: 7px; font-size: .78rem; }
+  .inventory td > :global(.button) { min-width: 0; width: 100%; white-space: nowrap; }
+  .sectorColumn { width: 27%; }
+  .specialtyColumn { width: 24%; }
+  .actionColumn { width: 6.75rem; }
 }

@@ -10,9 +10,9 @@ import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 import type { HospitalRole } from "@/lib/staff-context";
 import { StaffShell } from "@/components/staff-shell";
 import { apiGet } from "@/lib/api/client";
-import { ayerIso, formatoFechaIso, hoyIso } from "@/lib/argentina-date";
+import { formatoFechaIso, hoyIso } from "@/lib/argentina-date";
 import { DistribucionVerticalGrafico, SerieVerticalGrafico } from "./hospital-metrics-charts";
-import { HospitalMetricsNavigation } from "./hospital-metrics-navigation";
+import { HospitalAdminNavigation } from "./hospital-admin-navigation";
 import {
   distribucionBot,
   distribucionMedico,
@@ -22,7 +22,10 @@ import {
   formatoPorcentajeEntero,
   formatoPromedio,
   porcentajeDesdeConteos,
+  porcentajeGrafico,
   rangoFormularioSchema,
+  rangoEsteMes,
+  rangoMesAnterior,
   techoSerie,
   validarRangoFechas,
   type MetricasHospitalResponse,
@@ -32,6 +35,7 @@ import {
 function AnilloPorcentaje({ etiqueta, porcentaje }: { etiqueta: string; porcentaje?: number | null }) {
   const entero = formatoPorcentajeEntero(porcentaje);
   const conDato = entero !== null;
+  const geometria = porcentajeGrafico(porcentaje);
   return (
     <svg
       viewBox="0 0 36 36"
@@ -46,9 +50,11 @@ function AnilloPorcentaje({ etiqueta, porcentaje }: { etiqueta: string; porcenta
         r="15.9155"
         fill="none"
         className="metrics-ring-value"
-        strokeDasharray={`${conDato ? entero : 0} 100`}
+        pathLength="100"
+        strokeDasharray={`${geometria} ${100 - geometria}`}
         strokeDashoffset="25"
         strokeLinecap="round"
+        visibility={geometria > 0 ? "visible" : "hidden"}
       />
       <text x="18" y="20.5" textAnchor="middle" className="metrics-ring-number">
         {conDato ? `${entero}%` : "-"}
@@ -88,6 +94,7 @@ export function HospitalMetricsPanel({
 }) {
   const router = useRouter();
   const [hoy, setHoy] = useState(hoyInicial);
+  const [modoPeriodo, setModoPeriodo] = useState<"este-mes" | "mes-anterior" | "personalizado">("este-mes");
   // La orientación es local a cada sección: no vive en la URL ni en la query.
   const [vistaDistribuciones, setVistaDistribuciones] = useState<"horizontal" | "vertical">("horizontal");
   const [vistaSerie, setVistaSerie] = useState<"horizontal" | "vertical">("horizontal");
@@ -116,10 +123,41 @@ export function HospitalMetricsPanel({
   });
   useEffect(() => {
     formRango.reset({ desde: desdeUrl, hasta: hastaUrl });
-  }, [formRango, desdeUrl, hastaUrl]);
+    if (desdeUrl || hastaUrl) {
+      const actual = rangoEsteMes(hoyInicial);
+      const previo = rangoMesAnterior(hoyInicial);
+      setModoPeriodo(desdeUrl === actual.desde && hastaUrl === actual.hasta
+        ? "este-mes"
+        : desdeUrl === previo.desde && hastaUrl === previo.hasta
+          ? "mes-anterior"
+          : "personalizado");
+    } else {
+      const actual = rangoEsteMes(hoyInicial);
+      formRango.reset(actual);
+      setModoPeriodo("este-mes");
+    }
+  }, [formRango, desdeUrl, hastaUrl, hoyInicial]);
   const erroresForm = formRango.formState.errors;
   const desdeForm = useWatch({ control: formRango.control, name: "desde" });
   const hastaForm = useWatch({ control: formRango.control, name: "hasta" });
+  const presetActivo = modoPeriodo;
+
+  const aplicarRango = (rango: { desde: string; hasta: string }, modo: "este-mes" | "mes-anterior") => {
+    formRango.setValue("desde", rango.desde, { shouldDirty: true, shouldValidate: false });
+    formRango.setValue("hasta", rango.hasta, { shouldDirty: true, shouldValidate: false });
+    formRango.clearErrors(["desde", "hasta"]);
+    setModoPeriodo(modo);
+  };
+
+  const personalizar = () => {
+    setModoPeriodo("personalizado");
+    formRango.setFocus("desde");
+  };
+
+  const cambiarFecha = (campo: "desde" | "hasta", valor: string, onChange: (valor: string) => void) => {
+    onChange(valor);
+    setModoPeriodo("personalizado");
+  };
 
   const consulta = useQuery({
     queryKey: ["admin-metricas", hospitalId, desdeUrl, hastaUrl],
@@ -144,8 +182,9 @@ export function HospitalMetricsPanel({
 
   const enviarConsulta = formRango.handleSubmit((valores) => {
     if (enPendiente) return;
+    const rango = modoPeriodo === "este-mes" ? rangoEsteMes(hoyIso()) : valores;
     router.replace(
-      `/admin/hospital/metricas?hospitalId=${hospitalId}&desde=${valores.desde}&hasta=${valores.hasta}`,
+      `/admin/hospital/metricas?hospitalId=${hospitalId}&desde=${rango.desde}&hasta=${rango.hasta}`,
       { scroll: false },
     );
   });
@@ -172,7 +211,7 @@ export function HospitalMetricsPanel({
       role="Administración"
       userName={userName}
       section="Personal"
-      sectionNavigation={<HospitalMetricsNavigation hospitalId={hospitalId} />}
+      sectionNavigation={<HospitalAdminNavigation hospitalId={hospitalId} activeSection="metricas" />}
       hospitalId={hospitalId}
       hospitalName={hospitalName}
       roles={roles}
@@ -181,19 +220,25 @@ export function HospitalMetricsPanel({
       <div className="page-stack admin-workspace">
         <header className="page-heading">
           <p className="eyebrow">Métricas del hospital</p>
-          <h1>{hospitalName}</h1>
-          <p>Consultá la atención, la cola y la gravedad de un período para encontrar mejoras.</p>
+          <h1>Métricas de atención</h1>
+          <p>{hospitalName}. Los resultados se agrupan por fecha de ingreso del paciente a la cola.</p>
         </header>
 
         <section className="panel" aria-labelledby="metricas-consulta">
           <div className="panel-heading">
             <div>
               <h2 id="metricas-consulta" tabIndex={-1}>Consultar período</h2>
-              <p>La fecha «desde» debe ser anterior a hoy. La fecha «hasta» puede ser hoy o anterior.</p>
+              <p>Elegí un período o ajustá las fechas. El rango incluye desde y hasta.</p>
             </div>
           </div>
           <form className="metrics-form" onSubmit={(evento) => void enviarConsulta(evento)} noValidate>
             <RequiredFieldsNote />
+            <fieldset className="metrics-presets" aria-label="Período de métricas">
+              <legend>Período</legend>
+              <button type="button" className={`button ${presetActivo === "este-mes" ? "button-primary" : "button-secondary"}`} aria-pressed={presetActivo === "este-mes"} disabled={enPendiente} onClick={() => aplicarRango(rangoEsteMes(hoyIso()), "este-mes")}>Este mes</button>
+              <button type="button" className={`button ${presetActivo === "mes-anterior" ? "button-primary" : "button-secondary"}`} aria-pressed={presetActivo === "mes-anterior"} disabled={enPendiente} onClick={() => aplicarRango(rangoMesAnterior(hoyIso()), "mes-anterior")}>Mes anterior</button>
+              <button type="button" className={`button ${presetActivo === "personalizado" ? "button-primary" : "button-secondary"}`} aria-pressed={presetActivo === "personalizado"} disabled={enPendiente} onClick={personalizar}>Personalizado</button>
+            </fieldset>
             <div className="field">
               <label htmlFor="metrics-start-date"><RequiredLabel>Desde</RequiredLabel></label>
               <Controller
@@ -201,10 +246,11 @@ export function HospitalMetricsPanel({
                 name="desde"
                 render={({ field }) => (
                   <DatePicker
-                    {...field}
+                  {...field}
+                  onChange={(valor) => cambiarFecha("desde", valor, field.onChange)}
                     id="metrics-start-date"
                     required
-                    max={ayerIso(hoy)}
+                    max={hoy}
                     disabled={enPendiente}
                     aria-invalid={errorDesde ? true : undefined}
                     aria-describedby={errorDesde ? "metricas-desde-error" : undefined}
@@ -220,7 +266,8 @@ export function HospitalMetricsPanel({
                 name="hasta"
                 render={({ field }) => (
                   <DatePicker
-                    {...field}
+                  {...field}
+                  onChange={(valor) => cambiarFecha("hasta", valor, field.onChange)}
                     id="metrics-end-date"
                     required
                     max={hoy}
@@ -232,7 +279,7 @@ export function HospitalMetricsPanel({
               />
               <span id="metricas-hasta-error" className="field-error">{errorHasta ?? ""}</span>
             </div>
-            <button className="button button-primary" type="submit" disabled={enPendiente}>
+            <button className="button button-primary metrics-submit" type="submit" disabled={enPendiente}>
               Consultar
             </button>
           </form>
@@ -256,53 +303,57 @@ export function HospitalMetricsPanel({
             <section className="panel" aria-labelledby="metricas-summary">
               <div className="panel-heading">
                 <div>
-                  <h2 id="metricas-summary" tabIndex={-1}>Resumen</h2>
+                  <h2 id="metricas-summary" tabIndex={-1}>Atención y pretriage</h2>
                   <p>
                     Período del {formatoFechaIso(datos.desde ?? desdeUrl)} al {formatoFechaIso(datos.hasta ?? hastaUrl)}.
                   </p>
                 </div>
               </div>
               <div className="metrics-grid">
-                <KpiTarjeta titulo="Ingresados a la cola" valor={formatoConteo(datos.ingresaronACola)} />
-                <KpiTarjeta titulo="Atendidos" valor={formatoConteo(datos.pacientesAtendidos)} />
-                <KpiTarjeta titulo="No atendidos" valor={formatoConteo(datos.pacientesNoAtendidos)} />
+                <KpiTarjeta titulo="Ingresos a la cola" valor={formatoConteo(datos.ingresaronACola)} />
+                <KpiTarjeta titulo="Atenciones finalizadas" valor={formatoConteo(datos.pacientesAtendidos)} />
+                <KpiTarjeta titulo="Ingresos sin atención finalizada" valor={formatoConteo(datos.pacientesNoAtendidos)} />
                 <div className="metrics-kpi">
-                  <span>Porcentaje de atención</span>
+                  <span>Ingresos con atención finalizada</span>
                   <div className="metrics-kpi-ring">
-                    <AnilloPorcentaje etiqueta="Porcentaje de atención" porcentaje={datos.porcentajeAtendidos} />
+                    <AnilloPorcentaje etiqueta="Ingresos con atención finalizada" porcentaje={datos.porcentajeAtendidos} />
                   </div>
                 </div>
-                <KpiTarjeta titulo="Espera promedio en minutos" valor={formatoPromedio(datos.esperaPromedioMinutos)} />
+                <KpiTarjeta titulo="Tiempo promedio de espera (minutos)" valor={formatoPromedio(datos.esperaPromedioMinutos)} />
                 <div className="metrics-kpi">
-                  <span>Pretriage realizado</span>
+                  <span>Pretriage IA completado</span>
                   <div className="metrics-kpi-ring">
-                    <AnilloPorcentaje etiqueta="Pretriage realizado" porcentaje={datos.porcentajePretriageRealizado} />
+                    <AnilloPorcentaje etiqueta="Pretriage IA completado" porcentaje={datos.porcentajePretriageRealizado} />
                     <small>
                       {formatoConteo(datos.pretriageRealizado)} de {formatoConteo(totalPretriage)}
                     </small>
                   </div>
                 </div>
                 <div className="metrics-kpi">
-                  <span>Pretriage no realizado</span>
+                  <span>Pretriage IA no completado</span>
                   <div className="metrics-kpi-ring">
                     {/* El backend expone el porcentaje de "realizado"; el de
                         "no realizado" se deriva de los conteos y se trunca en
                         el anillo, sin inventar un complemento redondeado. */}
                     <AnilloPorcentaje
-                      etiqueta="Pretriage no realizado"
+                      etiqueta="Pretriage IA no completado"
                       porcentaje={porcentajePretriageNoRealizado}
                     />
                     <small>{formatoConteo(datos.pretriageNoRealizado)}</small>
                   </div>
                 </div>
               </div>
+              <p className="metrics-empty-note">
+                Ingresos y atenciones se cuentan según la fecha de ingreso a la cola. Una atención cuenta como realizada al finalizarse.
+                El pretriage IA incluye chats completados y no incluye las admisiones de recepción.
+              </p>
             </section>
 
             <section className="panel" aria-labelledby="metricas-distribucion">
               <div className="panel-heading metrics-section-heading">
                 <div>
-                  <h2 id="metricas-distribucion" tabIndex={-1}>Distribuciones</h2>
-                  <p>Casos por gravedad asignada por el bot y revisada por el médico.</p>
+                  <h2 id="metricas-distribucion" tabIndex={-1}>Casos por nivel de gravedad</h2>
+                  <p>Clasificación inicial del bot (incluye casos sin clasificación) y gravedad registrada por el médico (incluye casos sin revisión).</p>
                 </div>
                 <button
                   type="button"
@@ -321,11 +372,11 @@ export function HospitalMetricsPanel({
                 <div
                   className="metrics-table-wrap"
                   role="region"
-                  aria-label="Gravedad asignada por el bot"
+                  aria-label="Clasificación inicial del bot"
                   tabIndex={0}
                 >
                   <table className="metrics-table">
-                    <caption>Gravedad asignada por el bot</caption>
+                    <caption>Clasificación inicial del bot</caption>
                   <thead>
                     <tr>
                       <th scope="col">Gravedad</th>
@@ -344,7 +395,7 @@ export function HospitalMetricsPanel({
                           <div className="metrics-bar" aria-hidden="true">
                             <div
                               className={`metrics-bar-fill metrics-fill ${fila.clase}`}
-                              style={{ width: `${formatoPorcentajeEntero(fila.porcentaje) ?? 0}%` }}
+                              style={{ width: `${porcentajeGrafico(fila.porcentaje)}%` }}
                             />
                           </div>
                         </td>
@@ -356,11 +407,11 @@ export function HospitalMetricsPanel({
                 <div
                   className="metrics-table-wrap"
                   role="region"
-                  aria-label="Gravedad revisada por el médico"
+                  aria-label="Gravedad registrada por el médico"
                   tabIndex={0}
                 >
                   <table className="metrics-table">
-                    <caption>Gravedad revisada por el médico</caption>
+                    <caption>Gravedad registrada por el médico</caption>
                   <thead>
                     <tr>
                       <th scope="col">Revisión</th>
@@ -379,7 +430,7 @@ export function HospitalMetricsPanel({
                           <div className="metrics-bar" aria-hidden="true">
                             <div
                               className={`metrics-bar-fill metrics-fill ${fila.clase}`}
-                              style={{ width: `${formatoPorcentajeEntero(fila.porcentaje) ?? 0}%` }}
+                              style={{ width: `${porcentajeGrafico(fila.porcentaje)}%` }}
                             />
                           </div>
                         </td>
@@ -393,12 +444,12 @@ export function HospitalMetricsPanel({
                 <div className="metrics-columns">
                   <DistribucionVerticalGrafico
                     key={`distribucion-bot-${claveRango}`}
-                    titulo="Gravedad asignada por el bot"
+                    titulo="Clasificación inicial del bot"
                     filas={bot}
                   />
                   <DistribucionVerticalGrafico
                     key={`distribucion-medico-${claveRango}`}
-                    titulo="Gravedad revisada por el médico"
+                    titulo="Gravedad registrada por el médico"
                     filas={medico}
                   />
                 </div>
@@ -408,8 +459,8 @@ export function HospitalMetricsPanel({
             <section className="panel" aria-labelledby="metricas-serie">
               <div className="panel-heading metrics-section-heading">
                 <div>
-                  <h2 id="metricas-serie" tabIndex={-1}>Serie diaria</h2>
-                  <p>Ingresados y atendidos por día, incluidos los días sin atenciones.</p>
+                  <h2 id="metricas-serie" tabIndex={-1}>Ingresos y atenciones por día</h2>
+                  <p>Por fecha de ingreso a la cola: pacientes ingresados, atenciones finalizadas y espera promedio.</p>
                 </div>
                 {serie.length ? (
                   <button
@@ -430,16 +481,16 @@ export function HospitalMetricsPanel({
                 <div
                   className="metrics-table-wrap"
                   role="region"
-                  aria-label="Pacientes por día del período"
+                  aria-label="Ingresos y atenciones finalizadas por fecha de ingreso"
                   tabIndex={0}
                 >
                   <table className="metrics-table">
-                    <caption>Pacientes por día del período</caption>
+                    <caption>Ingresos y atenciones finalizadas por fecha de ingreso</caption>
                   <thead>
                     <tr>
                       <th scope="col">Fecha</th>
                       <th scope="col">Ingresados</th>
-                      <th scope="col">Atendidos</th>
+                      <th scope="col">Atenciones finalizadas</th>
                       <th scope="col">Espera promedio en minutos</th>
                       <th scope="col" aria-hidden="true" />
                     </tr>
@@ -455,11 +506,11 @@ export function HospitalMetricsPanel({
                           <div className="metrics-bar metrics-bar-pair" aria-hidden="true">
                             <div
                               className="metrics-bar-fill metrics-bar-ingresados"
-                              style={{ width: `${Math.round((Math.max(dia.ingresados ?? 0, 0) / techo) * 100)}%` }}
+                              style={{ width: `${porcentajeGrafico(dia.ingresados, techo)}%` }}
                             />
                             <div
                               className="metrics-bar-fill metrics-bar-atendidos"
-                              style={{ width: `${Math.round((Math.max(dia.atendidos ?? 0, 0) / techo) * 100)}%` }}
+                              style={{ width: `${porcentajeGrafico(dia.atendidos, techo)}%` }}
                             />
                           </div>
                         </td>

@@ -399,7 +399,7 @@ export function ReceptionCoverageStep({
           {isCancelling ? "Cancelando…" : "Cancelar admisión"}
         </button>
         <button className="button button-primary" disabled={pending || editingCredentialId !== null || selectedCredentialId === undefined || selectedUnavailable || (selectedCredentialId !== null && credentialsQuery.isPending)} type="button" onClick={continueToTriage}>
-          {isContinuing ? "Guardando cobertura…" : "Continuar al pretriage"}
+          {isContinuing ? "Guardando cobertura…" : "Continuar"}
         </button>
       </div>
     </div>

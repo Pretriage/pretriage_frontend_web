@@ -119,8 +119,8 @@ export function ReceptionClinicalForm({ form, onReview, onCancel, onEditCoverage
         <div className={styles.actions}>
           <button className="button button-danger-ghost" disabled={isCancelling} type="button" onClick={onCancel}>Cancelar admisión</button>
           <div className={styles.nextActions}>
-            {onEditCoverage ? <button className="button button-secondary" type="button" disabled={isCancelling} onClick={onEditCoverage}>Editar cobertura</button> : null}
-            <button className="button button-primary" disabled={isCancelling} type="submit">Revisar información</button>
+            {onEditCoverage ? <button className="button button-secondary" type="button" disabled={isCancelling} onClick={onEditCoverage}>Volver</button> : null}
+            <button className="button button-primary" disabled={isCancelling} type="submit">Continuar</button>
           </div>
         </div>
       </footer>

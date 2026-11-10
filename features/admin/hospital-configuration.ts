@@ -12,7 +12,12 @@ export type Room = Omit<Sector, "id"> & {
   sectorId: number | null;
   sectorNombre: string | null;
 };
-export type HospitalConfiguration = { especialidades: Specialty[]; salas: Room[]; sectores: Sector[] };
+export type HospitalConfiguration = {
+  especialidades: Specialty[];
+  salas: Room[];
+  sectores: Sector[];
+  salasOcupadasIds?: number[];
+};
 export type MedicalSession = {
   id: number;
   medicoId: number;

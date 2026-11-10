@@ -335,6 +335,69 @@
         }
       }
     },
+    "/api/admin/hospitales/{hospitalId}/membresias/{membresiaId}/roles/{rol}": {
+      "patch": {
+        "tags": [
+          "staff-access-controller"
+        ],
+        "operationId": "actualizarEstadoRol",
+        "parameters": [
+          {
+            "name": "hospitalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "membresiaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "rol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ADMIN_HOSPITAL",
+                "MEDICO",
+                "RECEPCIONISTA"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActualizarEstadoRolRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembresiaResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/hospitales/{hospitalId}/configuracion/sectores/{sectorId}": {
       "put": {
         "tags": [
@@ -3461,6 +3524,352 @@
           }
         }
       }
+    },
+    "/api/medico/sesiones/{sesionId}/consultas/{consultaId}/discrepancia-sintomas": {
+      "get": {
+        "tags": [
+          "discrepancia-sintomas-controller"
+        ],
+        "operationId": "obtener",
+        "parameters": [
+          {
+            "name": "sesionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "consultaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscrepanciaSintomasDTO"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "discrepancia-sintomas-controller"
+        ],
+        "operationId": "registrar",
+        "parameters": [
+          {
+            "name": "sesionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "consultaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscrepanciaSintomasDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/medico/sesiones/{sesionId}/seleccionar-proximo": {
+      "post": {
+        "tags": [
+          "medico-controller"
+        ],
+        "operationId": "seleccionarProximo",
+        "parameters": [
+          {
+            "name": "sesionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultaLlamadaDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/medico/sesiones/{sesionId}/consultas/{consultaId}/llamar": {
+      "post": {
+        "tags": [
+          "medico-controller"
+        ],
+        "operationId": "llamarConsulta",
+        "parameters": [
+          {
+            "name": "sesionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "consultaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultaLlamadaDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/medico/sesiones/{sesionId}/consultas/{consultaId}/devolver-a-cola": {
+      "post": {
+        "tags": [
+          "medico-controller"
+        ],
+        "operationId": "devolverACola",
+        "parameters": [
+          {
+            "name": "sesionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "consultaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultaLlamadaDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/medico/sesiones/{sesionId}/consultas/{consultaId}/datos-clinicos": {
+      "get": {
+        "tags": [
+          "datos-clinicos-consulta-controller"
+        ],
+        "operationId": "obtenerDatosClinicos",
+        "parameters": [
+          {
+            "name": "sesionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "consultaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatosClinicosConsultaDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/medico/sesiones/{sesionId}/consultas/{consultaId}/datos-clinicos/estudios/{estudioId}/archivo": {
+      "get": {
+        "tags": [
+          "datos-clinicos-consulta-controller"
+        ],
+        "operationId": "obtenerArchivo",
+        "parameters": [
+          {
+            "name": "sesionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "consultaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "estudioId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/hospitales/{hospitalId}/discrepancias": {
+      "get": {
+        "tags": [
+          "discrepancias-admin-controller"
+        ],
+        "operationId": "listar",
+        "parameters": [
+          {
+            "name": "hospitalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DiscrepanciaAdminDTO"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/hospitales/{hospitalId}/discrepancias/{discrepanciaId}/anular": {
+      "post": {
+        "tags": [
+          "discrepancias-admin-controller"
+        ],
+        "operationId": "anular",
+        "parameters": [
+          {
+            "name": "hospitalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "discrepanciaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3857,6 +4266,30 @@
             ]
           },
           "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ADMIN_HOSPITAL",
+                "MEDICO",
+                "RECEPCIONISTA"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "rolesSuspendidos": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ADMIN_HOSPITAL",
+                "MEDICO",
+                "RECEPCIONISTA"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "rolesEfectivos": {
             "type": "array",
             "items": {
               "type": "string",
@@ -4448,8 +4881,12 @@
           },
           "cobertura": {
             "anyOf": [
-              { "$ref": "#/components/schemas/CoberturaRecepcionDTO" },
-              { "type": "null" }
+              {
+                "$ref": "#/components/schemas/CoberturaRecepcionDTO"
+              },
+              {
+                "type": "null"
+              }
             ]
           }
         }
@@ -4458,11 +4895,17 @@
         "type": "object",
         "properties": {
           "credencialId": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "nombreObraSocial": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -4470,7 +4913,10 @@
         "type": "object",
         "properties": {
           "credencialId": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "exclusiveMinimum": 0
           }
@@ -4622,6 +5068,7 @@
               "PRETRIAGE_FINALIZADO",
               "PRETRIAGE_EN_PROCESO",
               "EN_COLA",
+              "EN_REVISION",
               "LLAMADO",
               "EN_ESPERA",
               "ATRASADO",
@@ -4634,6 +5081,7 @@
             "type": "string",
             "enum": [
               "EN_COLA",
+              "EN_REVISION",
               "LLAMADO",
               "EN_ESPERA",
               "ATRASADO",
@@ -5087,6 +5535,7 @@
               "PRETRIAGE_FINALIZADO",
               "PRETRIAGE_EN_PROCESO",
               "EN_COLA",
+              "EN_REVISION",
               "LLAMADO",
               "EN_ESPERA",
               "ATRASADO",
@@ -5410,6 +5859,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SectorHospitalResponse"
+            }
+          },
+          "salasOcupadasIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
             }
           }
         }
@@ -6032,6 +6488,18 @@
               ]
             },
             "uniqueItems": true
+          },
+          "rolesSuspendidos": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ADMIN_HOSPITAL",
+                "MEDICO",
+                "RECEPCIONISTA"
+              ]
+            },
+            "uniqueItems": true
           }
         }
       },
@@ -6163,6 +6631,159 @@
             "type": "string"
           }
         }
+      },
+      "DiscrepanciaSintomasDTO": {
+        "type": "object",
+        "properties": {
+          "registrada": {
+            "type": "boolean"
+          },
+          "puedeRegistrar": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DatosClinicosConsultaDTO": {
+        "type": "object",
+        "properties": {
+          "fechaNacimiento": {
+            "type": "string",
+            "format": "date"
+          },
+          "generoBiologico": {
+            "type": "string",
+            "enum": [
+              "MASCULINO",
+              "FEMENINO",
+              "X"
+            ]
+          },
+          "generoConElQueSeIdentifica": {
+            "type": "string",
+            "enum": [
+              "MASCULINO",
+              "FEMENINO",
+              "X"
+            ]
+          },
+          "peso": {
+            "type": "number",
+            "format": "double"
+          },
+          "altura": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "estudios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Estudio"
+            }
+          }
+        }
+      },
+      "Estudio": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "nombreArchivo": {
+            "type": "string"
+          },
+          "tipoArchivo": {
+            "type": "string"
+          },
+          "extensionArchivo": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "fechaSubida": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tamanoArchivo": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "DiscrepanciaAdminDTO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pacienteNombre": {
+            "type": "string"
+          },
+          "pacienteDni": {
+            "type": "string"
+          },
+          "medicoNombre": {
+            "type": "string"
+          },
+          "registradaEn": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "VIGENTE",
+              "ANULADA"
+            ]
+          },
+          "sancion": {
+            "$ref": "#/components/schemas/EstadoSancionPacienteDTO"
+          }
+        }
+      },
+      "EstadoSancionPacienteDTO": {
+        "type": "object",
+        "properties": {
+          "vigente": {
+            "type": "boolean"
+          },
+          "permanente": {
+            "type": "boolean"
+          },
+          "fechaFin": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "avisoId": {
+            "type": "string"
+          },
+          "tipoAviso": {
+            "type": "string",
+            "enum": [
+              "APLICADA",
+              "LEVANTADA"
+            ]
+          }
+        }
+      },
+      "ActualizarEstadoRolRequest": {
+        "type": "object",
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "INVITADA",
+              "ACTIVA",
+              "SUSPENDIDA",
+              "REVOCADA"
+            ]
+          }
+        },
+        "required": [
+          "estado"
+        ]
       }
     },
     "securitySchemes": {

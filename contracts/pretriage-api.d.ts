@@ -84,6 +84,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/hospitales/{hospitalId}/membresias/{membresiaId}/roles/{rol}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["actualizarEstadoRol"];
+        trace?: never;
+    };
     "/api/admin/hospitales/{hospitalId}/configuracion/sectores/{sectorId}": {
         parameters: {
             query?: never;
@@ -1396,6 +1412,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/medico/sesiones/{sesionId}/consultas/{consultaId}/discrepancia-sintomas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["obtener"];
+        put: operations["registrar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/medico/sesiones/{sesionId}/seleccionar-proximo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["seleccionarProximo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/medico/sesiones/{sesionId}/consultas/{consultaId}/llamar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["llamarConsulta"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/medico/sesiones/{sesionId}/consultas/{consultaId}/devolver-a-cola": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["devolverACola"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/medico/sesiones/{sesionId}/consultas/{consultaId}/datos-clinicos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["obtenerDatosClinicos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/medico/sesiones/{sesionId}/consultas/{consultaId}/datos-clinicos/estudios/{estudioId}/archivo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["obtenerArchivo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/hospitales/{hospitalId}/discrepancias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/hospitales/{hospitalId}/discrepancias/{discrepanciaId}/anular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["anular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1505,6 +1649,8 @@ export interface components {
             /** @enum {string} */
             estado?: "INVITADA" | "ACTIVA" | "SUSPENDIDA" | "REVOCADA";
             roles?: ("ADMIN_HOSPITAL" | "MEDICO" | "RECEPCIONISTA")[];
+            rolesSuspendidos?: ("ADMIN_HOSPITAL" | "MEDICO" | "RECEPCIONISTA")[];
+            rolesEfectivos?: ("ADMIN_HOSPITAL" | "MEDICO" | "RECEPCIONISTA")[];
         };
         ActualizarSectorRequest: {
             nombre: string;
@@ -1741,9 +1887,9 @@ export interface components {
             /** Format: int64 */
             consultaId?: number;
             /** @enum {string} */
-            estadoConsulta?: "PENDIENTE" | "HOSPITAL_SELECCIONADO" | "PRETRIAGE_FINALIZADO" | "PRETRIAGE_EN_PROCESO" | "EN_COLA" | "LLAMADO" | "EN_ESPERA" | "ATRASADO" | "EN_ATENCION" | "FINALIZADA" | "CANCELADA";
+            estadoConsulta?: "PENDIENTE" | "HOSPITAL_SELECCIONADO" | "PRETRIAGE_FINALIZADO" | "PRETRIAGE_EN_PROCESO" | "EN_COLA" | "EN_REVISION" | "LLAMADO" | "EN_ESPERA" | "ATRASADO" | "EN_ATENCION" | "FINALIZADA" | "CANCELADA";
             /** @enum {string} */
-            estadoEntradaCola?: "EN_COLA" | "LLAMADO" | "EN_ESPERA" | "ATRASADO" | "EN_ATENCION" | "FINALIZADA" | "CANCELADA";
+            estadoEntradaCola?: "EN_COLA" | "EN_REVISION" | "LLAMADO" | "EN_ESPERA" | "ATRASADO" | "EN_ATENCION" | "FINALIZADA" | "CANCELADA";
             /** @enum {string} */
             tipoPausa?: "AUSENTE_AL_LLAMADO" | "ESPERA_MANUAL" | "ATRASADO_CONFIRMADO";
             /** Format: date-time */
@@ -1899,7 +2045,7 @@ export interface components {
             /** @enum {string} */
             prioridad?: "RIESGO_VITAL_INMEDIATO" | "MUY_URGENTE" | "URGENTE" | "NORMAL" | "NO_URGENTE";
             /** @enum {string} */
-            estadoConsulta?: "PENDIENTE" | "HOSPITAL_SELECCIONADO" | "PRETRIAGE_FINALIZADO" | "PRETRIAGE_EN_PROCESO" | "EN_COLA" | "LLAMADO" | "EN_ESPERA" | "ATRASADO" | "EN_ATENCION" | "FINALIZADA" | "CANCELADA";
+            estadoConsulta?: "PENDIENTE" | "HOSPITAL_SELECCIONADO" | "PRETRIAGE_FINALIZADO" | "PRETRIAGE_EN_PROCESO" | "EN_COLA" | "EN_REVISION" | "LLAMADO" | "EN_ESPERA" | "ATRASADO" | "EN_ATENCION" | "FINALIZADA" | "CANCELADA";
         };
         LoginRequest: {
             /** Format: email */
@@ -1993,6 +2139,7 @@ export interface components {
             especialidades?: components["schemas"]["EspecialidadHospitalResponse"][];
             salas?: components["schemas"]["SalaHospitalResponse"][];
             sectores?: components["schemas"]["SectorHospitalResponse"][];
+            salasOcupadasIds?: number[];
         };
         EspecialidadHospitalResponse: {
             /** Format: int64 */
@@ -2205,6 +2352,7 @@ export interface components {
             /** @enum {string} */
             estado?: "INVITADA" | "ACTIVA" | "SUSPENDIDA" | "REVOCADA";
             roles?: ("ADMIN_HOSPITAL" | "MEDICO" | "RECEPCIONISTA")[];
+            rolesSuspendidos?: ("ADMIN_HOSPITAL" | "MEDICO" | "RECEPCIONISTA")[];
         };
         DistribucionNivelItem: {
             nivel?: string;
@@ -2259,6 +2407,60 @@ export interface components {
             accion?: string;
             objetivo?: string;
             resultado?: string;
+        };
+        DiscrepanciaSintomasDTO: {
+            registrada?: boolean;
+            puedeRegistrar?: boolean;
+        };
+        DatosClinicosConsultaDTO: {
+            /** Format: date */
+            fechaNacimiento?: string;
+            /** @enum {string} */
+            generoBiologico?: "MASCULINO" | "FEMENINO" | "X";
+            /** @enum {string} */
+            generoConElQueSeIdentifica?: "MASCULINO" | "FEMENINO" | "X";
+            /** Format: double */
+            peso?: number;
+            /** Format: int32 */
+            altura?: number;
+            estudios?: components["schemas"]["Estudio"][];
+        };
+        Estudio: {
+            /** Format: int64 */
+            id?: number;
+            nombreArchivo?: string;
+            tipoArchivo?: string;
+            extensionArchivo?: string;
+            descripcion?: string;
+            /** Format: date-time */
+            fechaSubida?: string;
+            /** Format: int64 */
+            tamanoArchivo?: number;
+        };
+        DiscrepanciaAdminDTO: {
+            /** Format: int64 */
+            id?: number;
+            pacienteNombre?: string;
+            pacienteDni?: string;
+            medicoNombre?: string;
+            /** Format: date-time */
+            registradaEn?: string;
+            /** @enum {string} */
+            estado?: "VIGENTE" | "ANULADA";
+            sancion?: components["schemas"]["EstadoSancionPacienteDTO"];
+        };
+        EstadoSancionPacienteDTO: {
+            vigente?: boolean;
+            permanente?: boolean;
+            /** Format: date-time */
+            fechaFin?: string;
+            avisoId?: string;
+            /** @enum {string} */
+            tipoAviso?: "APLICADA" | "LEVANTADA";
+        };
+        ActualizarEstadoRolRequest: {
+            /** @enum {string} */
+            estado: "INVITADA" | "ACTIVA" | "SUSPENDIDA" | "REVOCADA";
         };
     };
     responses: never;
@@ -2459,6 +2661,34 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ActualizarRolesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["MembresiaResponse"];
+                };
+            };
+        };
+    };
+    actualizarEstadoRol: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hospitalId: number;
+                membresiaId: number;
+                rol: "ADMIN_HOSPITAL" | "MEDICO" | "RECEPCIONISTA";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActualizarEstadoRolRequest"];
             };
         };
         responses: {
@@ -4589,6 +4819,210 @@ export interface operations {
         responses: {
             /** @description OK */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    obtener: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sesionId: number;
+                consultaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DiscrepanciaSintomasDTO"];
+                };
+            };
+        };
+    };
+    registrar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sesionId: number;
+                consultaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DiscrepanciaSintomasDTO"];
+                };
+            };
+        };
+    };
+    seleccionarProximo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sesionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ConsultaLlamadaDTO"];
+                };
+            };
+        };
+    };
+    llamarConsulta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sesionId: number;
+                consultaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ConsultaLlamadaDTO"];
+                };
+            };
+        };
+    };
+    devolverACola: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sesionId: number;
+                consultaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ConsultaLlamadaDTO"];
+                };
+            };
+        };
+    };
+    obtenerDatosClinicos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sesionId: number;
+                consultaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DatosClinicosConsultaDTO"];
+                };
+            };
+        };
+    };
+    obtenerArchivo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sesionId: number;
+                consultaId: number;
+                estudioId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    listar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hospitalId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DiscrepanciaAdminDTO"][];
+                };
+            };
+        };
+    };
+    anular: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hospitalId: number;
+                discrepanciaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

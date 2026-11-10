@@ -1024,17 +1024,51 @@ textarea:focus-visible {
   gap: 8px !important;
 }
 
-.admin-configuration,
-.admin-sector {
-  display: grid;
-  gap: 24px;
+.personnel-list,
+.personnel-roles {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.personnel-row {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.personnel-identity {
   min-width: 0;
 }
 
-.admin-sector {
-  padding: 20px;
+.personnel-roles {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+}
+
+.personnel-role {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
   border: 1px solid var(--soft-line);
-  border-radius: 12px;
+  border-radius: 9px;
+}
+
+.personnel-role > span {
+  display: grid;
+  gap: 3px;
+}
+
+.personnel-role-state.is-suspended {
+  color: var(--amber);
+}
+
+.admin-configuration {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
 }
 
 .admin-configuration .record-actions {
@@ -1633,8 +1667,113 @@ span.required-mark {
 
 .priority-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.confirmation-dialog {
+  width: min(calc(100% - 32px), 520px);
+  max-height: 90vh;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 24px 70px rgba(27, 48, 80, .2);
+}
+
+.confirmation-dialog::backdrop {
+  background: rgba(24, 34, 53, .48);
+}
+
+.confirmation-dialog-content {
+  display: grid;
+  gap: 16px;
+  padding: clamp(20px, 5vw, 30px);
+}
+
+.confirmation-dialog-content > h2,
+.confirmation-dialog-content > p {
+  margin: 0;
+}
+
+.confirmation-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.hospital-discrepancy-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.clinical-studies {
+  min-width: 0;
+}
+
+.clinical-studies h3 {
+  margin: 0 0 10px;
+  font-size: .9rem;
+}
+
+.clinical-studies p {
+  margin: 4px 0;
+  color: var(--muted);
+  font-size: .8rem;
+}
+
+.clinical-study-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.clinical-study {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+  overflow-wrap: anywhere;
+}
+
+.clinical-study-row,
+.clinical-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.clinical-study-download {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.clinical-preview {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--soft-line);
+}
+
+.clinical-preview img,
+.clinical-preview canvas {
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
 }
 
 .priority-correction {
@@ -2013,14 +2152,51 @@ span.required-mark {
 
 /* Métricas del hospital */
 .metrics-form {
+  display: grid;
+  grid-template-columns: minmax(163px, 1fr) minmax(163px, 1fr) auto;
+  grid-template-rows: auto auto auto auto auto;
+  gap: 0 16px;
+}
+
+.metrics-form .required-fields-note {
+  grid-column: 1 / -1;
+  margin: 0 0 14px;
+}
+
+.metrics-presets {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
-  gap: 14px 16px;
+  align-items: center;
+  gap: 8px;
+  grid-column: 1 / -1;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+}
+
+.metrics-presets legend {
+  width: 100%;
+  margin-bottom: 2px;
+  color: var(--muted, #52616b);
+  font-size: .88rem;
+  font-weight: 650;
+}
+
+.metrics-presets .button[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--focus-ring, rgba(22, 119, 111, .24));
+}
+
+.metrics-submit {
+  grid-column: 3;
+  grid-row: 4;
+  align-self: start;
 }
 
 .metrics-form .field {
-  min-width: 163px;
+  display: grid;
+  grid-row: 3 / span 3;
+  grid-template-rows: subgrid;
+  gap: 0;
 }
 
 .metrics-form .field-error {
@@ -2333,7 +2509,8 @@ span.required-mark {
 }
 
 .metrics-vbar-fill {
-  min-height: 3px;
+  /* Zero or missing values must not look like nonzero data. */
+  min-height: 0;
   border-radius: 5px 5px 2px 2px;
 }
 
@@ -2512,13 +2689,29 @@ span.required-mark {
     flex-direction: column;
   }
 
-  .metrics-form .field,
-  .metrics-form .button {
+  .metrics-form > .field,
+  .metrics-form > .metrics-submit {
     min-width: 100%;
   }
 
   .metrics-form {
-    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+  }
+
+  .metrics-form .field {
+    grid-row: auto;
+    grid-template-rows: auto auto auto;
+  }
+
+  .metrics-submit {
+    grid-column: auto;
+    grid-row: auto;
+    align-self: stretch;
+  }
+
+  .metrics-presets .button {
+    flex: 1 1 calc(50% - 8px);
   }
 
   .metrics-columns {

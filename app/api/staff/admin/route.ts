@@ -4,6 +4,7 @@ import { backendRequest } from "@/lib/api/server";
 import { z } from "zod";
 
 type Body = Record<string, unknown> & { operation?: string; hospitalId?: number };
+const noStore = { "Cache-Control": "private, no-store" };
 
 function id(value: unknown, name: string) {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) throw new TypeError(`${name} inválido.`);
@@ -23,13 +24,24 @@ export async function POST(request: Request) {
     const base = `/api/admin/hospitales/${hospitalId}`;
     switch (body.operation) {
       case "bootstrap": {
-        const [personal, invitaciones, auditoria, configuracion] = await Promise.all([
+        const [personal, invitaciones, configuracion] = await Promise.all([
           backendRequest(`${base}/personal`),
           backendRequest(`${base}/invitaciones`),
-          backendRequest(`${base}/auditoria`),
           backendRequest(`${base}/configuracion`),
         ]);
-        return NextResponse.json({ personal, invitaciones, auditoria, configuracion });
+        return NextResponse.json({ personal, invitaciones, configuracion });
+      }
+      case "getConfiguration":
+        return NextResponse.json(await backendRequest(`${base}/configuracion`), { headers: noStore });
+      case "discrepancies":
+        return NextResponse.json(
+          await backendRequest(`${base}/discrepancias`),
+          { headers: noStore },
+        );
+      case "annulDiscrepancy": {
+        const discrepancyId = id(body.discrepancyId, "discrepancyId");
+        await backendRequest(`${base}/discrepancias/${discrepancyId}/anular`, { method: "POST" });
+        return new NextResponse(null, { status: 204, headers: noStore });
       }
       case "invite":
         return NextResponse.json(await backendRequest(`${base}/invitaciones`, {
@@ -44,6 +56,23 @@ export async function POST(request: Request) {
         const invitationId = id(body.invitationId, "invitationId");
         return NextResponse.json(await backendRequest(`${base}/invitaciones/${invitationId}/reenviar`, {
           method: "POST",
+        }));
+      }
+      case "setMembershipState": {
+        const membershipId = id(body.membershipId, "membershipId");
+        if (body.estado !== "ACTIVA" && body.estado !== "SUSPENDIDA") throw new TypeError("Estado de membresía inválido.");
+        const estado = body.estado;
+        return NextResponse.json(await backendRequest(`${base}/membresias/${membershipId}`, {
+          method: "PATCH", body: JSON.stringify({ estado }),
+        }));
+      }
+      case "setMembershipRoleState": {
+        const membershipId = id(body.membershipId, "membershipId");
+        if (body.role !== "ADMIN_HOSPITAL" && body.role !== "MEDICO" && body.role !== "RECEPCIONISTA") throw new TypeError("Rol inválido.");
+        const role = body.role;
+        if (body.estado !== "ACTIVA" && body.estado !== "SUSPENDIDA") throw new TypeError("Estado del rol inválido.");
+        return NextResponse.json(await backendRequest(`${base}/membresias/${membershipId}/roles/${role}`, {
+          method: "PATCH", body: JSON.stringify({ estado: body.estado }),
         }));
       }
       case "enableSpecialty": {

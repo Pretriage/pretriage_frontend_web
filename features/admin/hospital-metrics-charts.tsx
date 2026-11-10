@@ -6,6 +6,7 @@ import {
   formatoConteo,
   formatoPorcentajeEntero,
   formatoPromedio,
+  porcentajeGrafico,
   techoSerie,
   type FilaDistribucion,
   type SerieDiariaItem,
@@ -28,12 +29,6 @@ function esperaAccesible(valor?: number | null) {
   return formateado === "-" ? "espera promedio sin dato" : `espera promedio ${formateado} minutos`;
 }
 
-/** Altura porcentual de una barra vertical; los valores ausentes quedan en cero. */
-function alturaBarra(valor: number | null | undefined, techo = 100) {
-  const numero = typeof valor === "number" && Number.isFinite(valor) ? valor : 0;
-  return Math.max(0, Math.min(100, (numero / techo) * 100));
-}
-
 /**
  * Gráfico vertical de una distribución por gravedad. Cada barra es un botón
  * seleccionable y el detalle se anuncia en una región viva; esta vista no
@@ -52,6 +47,7 @@ export function DistribucionVerticalGrafico({
   return (
     <div className="metrics-chart">
       <h3 className="metrics-chart-title">{titulo}</h3>
+      <p className="metrics-chart-title">Altura: porcentaje del total de ingresos a la cola.</p>
       <div
         className="metrics-chart-scroll"
         role="region"
@@ -78,7 +74,7 @@ export function DistribucionVerticalGrafico({
                   <span className="metrics-vbar-track">
                     <span
                       className={`metrics-vbar-fill metrics-fill ${fila.clase}`}
-                      style={{ height: `${alturaBarra(fila.porcentaje)}%` }}
+                      style={{ height: `${porcentajeGrafico(fila.porcentaje)}%` }}
                     />
                   </span>
                 </span>
@@ -129,16 +125,16 @@ export function SerieVerticalGrafico({ serie }: { serie: SerieDiariaItem[] }) {
     <div className="metrics-chart">
       <div className="metrics-chart-legend" aria-hidden="true">
         <span>
-          <i className="metrics-chart-swatch metrics-bar-ingresados" />Ingresados
+          <i className="metrics-chart-swatch metrics-bar-ingresados" />Ingresos a la cola (consultas)
         </span>
         <span>
-          <i className="metrics-chart-swatch metrics-bar-atendidos" />Atendidos
+          <i className="metrics-chart-swatch metrics-bar-atendidos" />Atenciones finalizadas (consultas)
         </span>
       </div>
       <div
         className="metrics-chart-scroll"
         role="region"
-        aria-label="Pacientes por día del período: gráfico de columnas"
+        aria-label="Ingresos a la cola y atenciones finalizadas por día; columnas en consultas"
         tabIndex={0}
       >
         <div className="metrics-vchart metrics-vchart-series">
@@ -153,7 +149,7 @@ export function SerieVerticalGrafico({ serie }: { serie: SerieDiariaItem[] }) {
                 aria-pressed={seleccionado}
                 aria-label={`${formatoFechaIso(dia.fecha)}: ${formatoConteo(
                   dia.ingresados,
-                )} ingresados, ${formatoConteo(dia.atendidos)} atendidos, ${esperaAccesible(
+                )} ingresos a la cola, ${formatoConteo(dia.atendidos)} atenciones finalizadas, ${esperaAccesible(
                   dia.esperaPromedioMinutos,
                 )}. ${seleccionado ? "Quitar el detalle" : "Seleccionar para ver el detalle"}.`}
                 onClick={() => setSeleccion((actual) => (actual === fecha ? null : fecha))}
@@ -162,11 +158,11 @@ export function SerieVerticalGrafico({ serie }: { serie: SerieDiariaItem[] }) {
                   <span className="metrics-vbar-pair">
                     <span
                       className="metrics-vbar-fill metrics-bar-ingresados"
-                      style={{ height: `${alturaBarra(dia.ingresados, techo)}%` }}
+                      style={{ height: `${porcentajeGrafico(dia.ingresados, techo)}%` }}
                     />
                     <span
                       className="metrics-vbar-fill metrics-bar-atendidos"
-                      style={{ height: `${alturaBarra(dia.atendidos, techo)}%` }}
+                      style={{ height: `${porcentajeGrafico(dia.atendidos, techo)}%` }}
                     />
                   </span>
                 </span>
@@ -184,15 +180,15 @@ export function SerieVerticalGrafico({ serie }: { serie: SerieDiariaItem[] }) {
             <p className="metrics-chart-detail-title">{formatoFechaIso(diaSeleccionado.fecha)}</p>
             <dl className="metrics-chart-detail-grid">
               <div>
-                <dt>Ingresados</dt>
+                <dt>Ingresos a la cola (consultas)</dt>
                 <dd>{formatoConteo(diaSeleccionado.ingresados)}</dd>
               </div>
               <div>
-                <dt>Atendidos</dt>
+                <dt>Atenciones finalizadas (consultas)</dt>
                 <dd>{formatoConteo(diaSeleccionado.atendidos)}</dd>
               </div>
               <div>
-                <dt>Espera promedio</dt>
+                <dt>Espera promedio (minutos)</dt>
                 <dd>{formatoPromedio(diaSeleccionado.esperaPromedioMinutos)}</dd>
               </div>
             </dl>

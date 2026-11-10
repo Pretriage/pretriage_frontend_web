@@ -2,20 +2,25 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { ConfirmationDialog } from "@/components/confirmation-dialog";
 import { RequiredFieldsNote, RequiredLabel } from "@/components/required-field";
 import { SearchableCombobox } from "@/components/searchable-combobox";
 import { StaffShell } from "@/components/staff-shell";
 import { apiClient } from "@/lib/api/client";
 import { NIVELES_GRAVEDAD_BOT, nivelGravedadClass, nivelGravedadLabel } from "@/lib/severity";
 import type {
+  ConsultationClinicalData,
   ConsultationPretriage,
   DoctorBootstrap,
   MedicalRoom,
   MedicalSector,
   MedicalSession,
   QueueConsultation,
+  SymptomsDiscrepancy,
 } from "@/lib/api/types";
 import type { HospitalRole } from "@/lib/staff-context";
+import { ClinicalHistory } from "./clinical-history";
+import styles from "./doctor-workspace.module.css";
 
 const doctorApi = "/api/staff/doctor";
 
@@ -30,6 +35,7 @@ function ErrorNotice({ error }: { error: unknown }) {
 function stateLabel(value?: string) {
   return ({
     EN_COLA: "En cola",
+    EN_REVISION: "En revisión",
     LLAMADO: "Llamado",
     EN_ESPERA: "En espera",
     ATRASADO: "Atrasado",
@@ -57,6 +63,64 @@ function listText(value?: string[]) {
   return value?.length ? value.join(", ") : "No informado";
 }
 
+function PretriageSummary({ data, children, secondaryAction }: { data: ConsultationPretriage; children?: React.ReactNode; secondaryAction?: React.ReactNode }) {
+  const summary = data.resumenClinico;
+  return (
+    <section className="priority-review" aria-labelledby="priority-review-title">
+      <div className="priority-review-heading">
+        <div>
+          <span className="eyebrow">Preclasificación</span>
+          <h2 id="priority-review-title" tabIndex={-1}>Resumen para la atención</h2>
+        </div>
+        <div className={styles.summaryCorner}>
+          {data.cierreParcial ? (
+            <span className="status-chip">Entrevista parcial</span>
+          ) : (
+            <span className="priority-badge">{priorityLabel(data.prioridadPreliminar)}</span>
+          )}
+          {secondaryAction}
+        </div>
+      </div>
+      {summary ? (
+        <dl className="clinical-summary">
+          <div><dt>Motivo</dt><dd>{summary.motivoConsulta ?? "No informado"}</dd></div>
+          <div><dt>Síntomas</dt><dd>{listText(summary.sintomas)}</dd></div>
+          <div><dt>Inicio y evolución</dt><dd>{[summary.inicio, summary.evolucion].filter(Boolean).join(" · ") || "No informado"}</dd></div>
+          {summary.intensidadDolor != null ? <div><dt>Dolor</dt><dd>{summary.intensidadDolor}/10</dd></div> : null}
+          {summary.signosAlarma?.length ? <div><dt>Signos de alarma</dt><dd>{listText(summary.signosAlarma)}</dd></div> : null}
+          {summary.antecedentesRelevantes?.length ? <div><dt>Antecedentes relevantes</dt><dd>{listText(summary.antecedentesRelevantes)}</dd></div> : null}
+          {summary.medicamentos?.length ? <div><dt>Medicamentos declarados</dt><dd>{listText(summary.medicamentos)}</dd></div> : null}
+          {summary.alergias?.length ? <div><dt>Alergias declaradas</dt><dd>{listText(summary.alergias)}</dd></div> : null}
+          {summary.posibilidadEmbarazo ? <div><dt>Posibilidad de embarazo</dt><dd>{summary.posibilidadEmbarazo}</dd></div> : null}
+          {summary.observaciones ? <div><dt>Observaciones</dt><dd>{summary.observaciones}</dd></div> : null}
+        </dl>
+      ) : data.cierreParcial ? (
+        <>
+          <div className="notice notice-warning">
+            La entrevista terminó antes de completar la clasificación automática. La prioridad operativa inicial de la cola es provisional: {priorityLabel(data.prioridadPreliminar)}.
+          </div>
+          {data.mensajesConversacion?.length ? (
+            <div className="clinical-summary">
+              <strong>Conversación para contexto</strong>
+              <ol>
+                {data.mensajesConversacion.map((mensaje, index) => (
+                  <li key={`${mensaje.fechaHoraEnvio ?? "mensaje"}-${index}`}>
+                    <strong>{mensaje.autor === "PACIENTE" ? "Paciente" : "Asistente"}:</strong>{" "}
+                    {mensaje.contenido}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="notice notice-warning">No hay un resumen clínico estructurado disponible para esta consulta.</div>
+      )}
+      {children}
+    </section>
+  );
+}
+
 export function DoctorWorkspace({
   userName,
   hospitalId,
@@ -75,9 +139,13 @@ export function DoctorWorkspace({
   const [sectorId, setSectorId] = useState("");
   const [roomId, setRoomId] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [editingPriority, setEditingPriority] = useState(false);
+  const [priorityPanel, setPriorityPanel] = useState<{
+    consultationId: number;
+    view: "actions" | "correction";
+  } | null>(null);
   const [correctedPriority, setCorrectedPriority] = useState("");
   const [priorityReason, setPriorityReason] = useState("");
+  const [reportingConsultationId, setReportingConsultationId] = useState<number | null>(null);
 
   const bootstrap = useQuery({
     queryKey: ["doctor", "bootstrap"],
@@ -85,6 +153,21 @@ export function DoctorWorkspace({
   });
   const session = bootstrap.data?.session ?? null;
   const current = bootstrap.data?.currentConsultation ?? null;
+  const priorityView = priorityPanel?.consultationId === current?.consultaId ? priorityPanel?.view : undefined;
+  const reportingDiscrepancy = reportingConsultationId !== null && reportingConsultationId === current?.consultaId;
+  const openPriorityPanel = (view: "actions" | "correction") => {
+    if (!current?.consultaId) return;
+    if (priorityPanel?.consultationId !== current.consultaId) {
+      setCorrectedPriority("");
+      setPriorityReason("");
+    }
+    setPriorityPanel({ consultationId: current.consultaId, view });
+  };
+  const selected = current?.estadoConsulta === "EN_REVISION";
+  const called = current?.estadoConsulta === "LLAMADO";
+  const inAttention = current?.estadoConsulta === "EN_ATENCION";
+  const pretriageAvailable = Boolean(session?.id && current?.consultaId && (selected || called || inAttention));
+  const clinicalDataAvailable = pretriageAvailable && !called;
   const assignments = useMemo(
     () => bootstrap.data?.assignments.filter((item) => item.hospitalId === hospitalId) ?? [],
     [bootstrap.data?.assignments, hospitalId],
@@ -153,9 +236,29 @@ export function DoctorWorkspace({
         sessionId: session!.id,
         consultationId: current!.consultaId,
       }),
-    enabled: Boolean(
-      session?.id && current?.consultaId && current.estadoConsulta === "EN_ATENCION",
-    ),
+    enabled: pretriageAvailable,
+    gcTime: 0,
+  });
+  const clinicalData = useQuery({
+    queryKey: ["doctor", "clinical-data", session?.id, current?.consultaId],
+    queryFn: () =>
+      apiClient<ConsultationClinicalData | null>(doctorApi, "clinicalData", {
+        sessionId: session!.id,
+        consultationId: current!.consultaId,
+      }),
+    enabled: clinicalDataAvailable,
+    gcTime: 0,
+  });
+  const discrepancyKey = ["doctor", "symptoms-discrepancy", session?.id, current?.consultaId];
+  const discrepancy = useQuery({
+    queryKey: discrepancyKey,
+    queryFn: () =>
+      apiClient<SymptomsDiscrepancy | null>(doctorApi, "symptomsDiscrepancy", {
+        sessionId: session!.id,
+        consultationId: current!.consultaId,
+      }),
+    enabled: pretriageAvailable && inAttention,
+    gcTime: 0,
   });
 
   const updateRemoteState = (
@@ -201,39 +304,62 @@ export function DoctorWorkspace({
       void queryClient.invalidateQueries({ queryKey: ["doctor"] });
     },
   });
-  const callNext = useMutation({
+  const refreshQueueState = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["doctor", "bootstrap"] }),
+      queryClient.invalidateQueries({ queryKey: ["doctor", "queue", session?.id] }),
+    ]);
+  };
+
+  const selectNext = useMutation({
     mutationFn: () =>
-      apiClient<QueueConsultation>(doctorApi, "callNext", {
+      apiClient<QueueConsultation>(doctorApi, "selectNext", {
         sessionId: session?.id,
     }),
-    onSuccess: (called) => {
-      updateRemoteState({ session, currentConsultation: called });
+    onSuccess: (consultation) => {
+      updateRemoteState({ session, currentConsultation: consultation });
       setFeedback(null);
-      void queue.refetch();
     },
+    onSettled: refreshQueueState,
   });
   const consultationAction = useMutation({
-    mutationFn: (action: "presente" | "ausente" | "finalizar") =>
+    mutationFn: (action: "llamar" | "devolver-a-cola" | "presente" | "ausente" | "finalizar") =>
       apiClient<QueueConsultation>(doctorApi, "consultationAction", {
         sessionId: session?.id,
         consultationId: current?.consultaId,
         action,
       }),
     onSuccess: (updated, action) => {
-      if (action === "presente") {
+      if (action === "llamar" || action === "presente") {
         updateRemoteState({ session, currentConsultation: updated });
-        setFeedback("Presencia confirmada. La atención quedó iniciada.");
+        setFeedback(action === "presente" ? "Presencia confirmada. La atención quedó iniciada." : null);
       } else {
         updateRemoteState({ session, currentConsultation: null });
-        setFeedback(
-          action === "ausente"
-            ? "Paciente marcado como ausente y devuelto a la cola según el flujo configurado."
-            : "Atención finalizada correctamente.",
-        );
+        setFeedback({
+          "devolver-a-cola": "Paciente devuelto a la cola.",
+          ausente: "Paciente marcado como ausente y devuelto a la cola según el flujo configurado.",
+          finalizar: "Atención finalizada correctamente.",
+        }[action]);
+        setPriorityPanel(null);
+        setCorrectedPriority("");
+        setPriorityReason("");
+        setReportingConsultationId(null);
       }
-      void queue.refetch();
-      void queryClient.invalidateQueries({ queryKey: ["doctor", "bootstrap"] });
     },
+    onSettled: refreshQueueState,
+  });
+  const reportDiscrepancy = useMutation({
+    mutationFn: ({ sessionId, consultationId }: { sessionId: number; consultationId: number }) =>
+      apiClient<SymptomsDiscrepancy>(doctorApi, "reportSymptomsDiscrepancy", {
+        sessionId,
+        consultationId,
+      }),
+    onSuccess: (record, { sessionId, consultationId }) => {
+      queryClient.setQueryData(["doctor", "symptoms-discrepancy", sessionId, consultationId], record);
+      setReportingConsultationId(null);
+    },
+    onSettled: (_record, _error, { sessionId, consultationId }) =>
+      queryClient.invalidateQueries({ queryKey: ["doctor", "symptoms-discrepancy", sessionId, consultationId] }),
   });
   const priorityReview = useMutation({
     mutationFn: (review: {
@@ -251,7 +377,7 @@ export function DoctorWorkspace({
         ["doctor", "pretriage", session?.id, current?.consultaId],
         reviewed,
       );
-      setEditingPriority(false);
+      setPriorityPanel(null);
       setCorrectedPriority("");
       setPriorityReason("");
       setFeedback(
@@ -262,7 +388,7 @@ export function DoctorWorkspace({
     },
   });
 
-  const section = current ? "Atenciones" : session ? "Cola de pacientes" : "Inicio";
+  const section = selected ? "Revisión del caso" : current ? "Atenciones" : session ? "Cola de pacientes" : "Inicio";
   const shell = (content: React.ReactNode) => (
     <StaffShell
       canSwitchHospital={canSwitchHospital}
@@ -368,135 +494,169 @@ export function DoctorWorkspace({
     );
   }
   if (current) {
-    const inAttention = current.estadoConsulta === "EN_ATENCION";
-    const reviewPending = pretriage.data?.estadoRevision === "PENDIENTE";
-    const summary = pretriage.data?.resumenClinico;
-    const partialWithoutAiSummary = Boolean(pretriage.data?.cierreParcial && !summary);
+    const pretriageData = pretriage.data;
+    const reviewPending = pretriageData?.estadoRevision === "PENDIENTE";
+    const partialWithoutAiSummary = Boolean(pretriageData?.cierreParcial && !pretriageData.resumenClinico);
+    const actionPending = selectNext.isPending || consultationAction.isPending || priorityReview.isPending || reportDiscrepancy.isPending;
+    const clinicalHistory = clinicalData.data && session.id && current.consultaId ? (
+      <ClinicalHistory
+        key={`${session.id}-${current.consultaId}`}
+        data={clinicalData.data}
+        sessionId={session.id}
+        consultationId={current.consultaId}
+      />
+    ) : clinicalData.isPending ? (
+      <div className="loading-card" role="status">Cargando datos clínicos…</div>
+    ) : clinicalData.isError ? (
+      <div>
+        <ErrorNotice error={clinicalData.error} />
+        <button className="button button-secondary" disabled={clinicalData.isFetching} onClick={() => clinicalData.refetch()}>Reintentar datos clínicos</button>
+      </div>
+    ) : null;
+    const discrepancyButton = discrepancy.data?.registrada ? (
+      <button className={`button button-danger-ghost ${styles.discrepancyAction}`} type="button" disabled aria-label="Declaración falsa ya registrada">Declaración falsa registrada</button>
+    ) : discrepancy.data?.puedeRegistrar ? (
+      <button className={`button button-danger-ghost ${styles.discrepancyAction}`} type="button" disabled={actionPending} onClick={() => {
+        reportDiscrepancy.reset();
+        setReportingConsultationId(current.consultaId ?? null);
+      }}>
+        Marcar declaración falsa
+      </button>
+    ) : null;
+    const priorityControls = inAttention && pretriageData ? (
+      <>
+        {!reviewPending && !priorityView ? (
+          <div className="priority-reviewed">
+            <div>
+              <strong>{partialWithoutAiSummary
+                ? pretriageData.estadoRevision === "CONFIRMADA"
+                  ? "Prioridad clínica confirmada por el médico"
+                  : "Prioridad clínica ajustada por el médico"
+                : pretriageData.estadoRevision === "CONFIRMADA" ? "Prioridad confirmada" : "Prioridad corregida"}</strong>
+              <span>{priorityLabel(pretriageData.prioridadEfectiva)}</span>
+            </div>
+            <div className="priority-actions">
+              <button className="button button-secondary" disabled={actionPending} onClick={() => openPriorityPanel("actions")}>Cambiar</button>
+            </div>
+          </div>
+        ) : priorityView === "correction" ? (
+          <div className="priority-correction">
+            <RequiredFieldsNote />
+            <div className="field">
+              <label htmlFor="doctor-priority"><RequiredLabel>{partialWithoutAiSummary ? "Prioridad clínica que vas a asignar" : "Nueva prioridad"}</RequiredLabel></label>
+              <SearchableCombobox
+                id="doctor-priority"
+                required
+                value={correctedPriority}
+                placeholder="Seleccioná una prioridad"
+                options={NIVELES_GRAVEDAD_BOT.map((priority) => ({
+                  value: priority,
+                  label: priorityLabel(priority),
+                  disabled: priority === pretriageData.prioridadPreliminar,
+                }))}
+                onChange={setCorrectedPriority}
+              />
+            </div>
+            <label className="field">
+              <span>Motivo breve</span>
+              <textarea rows={2} maxLength={500} value={priorityReason} onChange={(event) => setPriorityReason(event.target.value)} placeholder="Ej.: la evaluación clínica no muestra signos de alarma" />
+            </label>
+            <div className="priority-actions">
+              <button className="button button-secondary" disabled={actionPending} onClick={() => openPriorityPanel("actions")}>Cancelar</button>
+              <button className="button button-primary" disabled={!correctedPriority || actionPending} onClick={() => priorityReview.mutate({ decision: "CORREGIR", priority: correctedPriority, reason: priorityReason })}>
+                {priorityReview.isPending ? "Guardando…" : partialWithoutAiSummary ? "Guardar prioridad clínica" : "Guardar corrección"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="priority-decision">
+            <p>{partialWithoutAiSummary
+              ? "La prioridad operativa inicial es provisional. Confirmá la prioridad clínica que usarás para esta atención o ajustala según tu evaluación."
+              : "Antes de finalizar, confirmá si la prioridad preliminar fue correcta."}</p>
+            <div className="priority-actions">
+              <button className="button button-secondary" disabled={actionPending} onClick={() => openPriorityPanel("correction")}>{partialWithoutAiSummary ? "Ajustar prioridad clínica" : "Modificar prioridad"}</button>
+              <button className="button button-primary" disabled={actionPending} onClick={() => priorityReview.mutate({ decision: "CONFIRMAR" })}>
+                {priorityReview.isPending ? "Confirmando…" : partialWithoutAiSummary ? "Confirmar prioridad clínica" : "La prioridad es correcta"}
+              </button>
+            </div>
+          </div>
+        )}
+        <ConfirmationDialog
+          open={reportingDiscrepancy && !discrepancy.data?.registrada}
+          title="Marcar declaración falsa"
+          description="¿Estás seguro? Marcá esta opción solo si considerás que el paciente declaró síntomas falsos de forma intencional. Esta acción aplicará una penalización al paciente."
+          confirmLabel="Sí, marcar"
+          pendingLabel="Registrando discrepancia…"
+          pending={reportDiscrepancy.isPending}
+          error={reportDiscrepancy.error}
+          focusFallbackId="priority-review-title"
+          onConfirm={() => {
+            if (!actionPending && discrepancy.data?.puedeRegistrar && session.id && current.consultaId) {
+              reportDiscrepancy.mutate({
+                sessionId: session.id,
+                consultationId: current.consultaId,
+              });
+            }
+          }}
+          onCancel={() => {
+            setReportingConsultationId(null);
+            reportDiscrepancy.reset();
+          }}
+        />
+        {discrepancy.isError ? (
+          <div>
+            <ErrorNotice error={discrepancy.error} />
+            <button className="button button-secondary" disabled={discrepancy.isFetching} onClick={() => discrepancy.refetch()}>Reintentar consulta de discrepancias</button>
+          </div>
+        ) : null}
+      </>
+    ) : null;
     return shell(
       <div className="page-stack narrow-stack">
         <header className="page-heading">
-          <p className="eyebrow">{inAttention ? "Atención en curso" : "Paciente llamado"}</p>
+          <p className="eyebrow">{selected ? "Revisión antes del llamado" : inAttention ? "Atención en curso" : "Paciente llamado"}</p>
           <h1>{patientName(current)}</h1>
           <p>Código {current.codigoLlamado ?? "no disponible"} · Sala {current.nombreSala ?? session.salaId} · {stateLabel(current.estadoConsulta)}</p>
         </header>
         <section className="panel call-panel">
           <div className="call-visual"><span>Estado</span><strong>{stateLabel(current.estadoConsulta)}</strong><small>Código {current.codigoLlamado}</small></div>
-          {!inAttention ? (
+          {pretriageAvailable && pretriage.isPending ? (
+            <div className="loading-card" role="status">Cargando resumen de pretriage…</div>
+          ) : pretriageAvailable && pretriageData ? (
+            <PretriageSummary
+              data={pretriageData}
+              secondaryAction={inAttention && (reviewPending || priorityView === "actions") ? discrepancyButton : null}
+            >
+              {priorityControls}
+            </PretriageSummary>
+          ) : null}
+          {pretriageAvailable ? <ErrorNotice error={pretriage.error} /> : null}
+          {pretriageAvailable && pretriage.isError && !pretriageData ? (
+            <button className="button button-secondary" disabled={pretriage.isFetching} onClick={() => pretriage.refetch()}>Reintentar resumen</button>
+          ) : null}
+          {clinicalDataAvailable ? clinicalHistory : null}
+          {selected ? (
             <div className="call-actions">
-              <button className="button button-primary" disabled={consultationAction.isPending} onClick={() => consultationAction.mutate("presente")}>Paciente presente</button>
-              <button className="button button-danger-ghost" disabled={consultationAction.isPending} onClick={() => consultationAction.mutate("ausente")}>Marcar ausente</button>
+              <button className="button button-primary" disabled={actionPending || pretriage.isPending || clinicalData.isPending} onClick={() => consultationAction.mutate("llamar")}>
+                {consultationAction.isPending && consultationAction.variables === "llamar" ? "Llamando…" : "Llamar paciente"}
+              </button>
+              <button className="button button-secondary" disabled={actionPending} onClick={() => consultationAction.mutate("devolver-a-cola")}>
+                {consultationAction.isPending && consultationAction.variables === "devolver-a-cola" ? "Devolviendo…" : "Devolver a la cola"}
+              </button>
             </div>
-          ) : (
+          ) : called ? (
+            <div className="call-actions">
+              <button className="button button-primary" disabled={actionPending} onClick={() => consultationAction.mutate("presente")}>Paciente presente</button>
+              <button className="button button-danger-ghost" disabled={actionPending} onClick={() => consultationAction.mutate("ausente")}>Marcar ausente</button>
+            </div>
+          ) : inAttention ? (
             <>
-              {pretriage.isPending ? (
-                <div className="loading-card">Cargando resumen de pretriage…</div>
-              ) : pretriage.data ? (
-                <section className="priority-review" aria-labelledby="priority-review-title">
-                  <div className="priority-review-heading">
-                    <div>
-                      <span className="eyebrow">Preclasificación</span>
-                      <h2 id="priority-review-title">Resumen para la atención</h2>
-                    </div>
-                    {pretriage.data.cierreParcial ? (
-                      <span className="status-chip">Entrevista parcial</span>
-                    ) : (
-                      <span className="priority-badge">{priorityLabel(pretriage.data.prioridadPreliminar)}</span>
-                    )}
-                  </div>
-                  {summary ? (
-                    <dl className="clinical-summary">
-                      <div><dt>Motivo</dt><dd>{summary.motivoConsulta ?? "No informado"}</dd></div>
-                      <div><dt>Síntomas</dt><dd>{listText(summary.sintomas)}</dd></div>
-                      <div><dt>Inicio y evolución</dt><dd>{[summary.inicio, summary.evolucion].filter(Boolean).join(" · ") || "No informado"}</dd></div>
-                      {summary.intensidadDolor != null ? <div><dt>Dolor</dt><dd>{summary.intensidadDolor}/10</dd></div> : null}
-                      {summary.signosAlarma?.length ? <div><dt>Signos de alarma</dt><dd>{listText(summary.signosAlarma)}</dd></div> : null}
-                      {summary.observaciones ? <div><dt>Observaciones</dt><dd>{summary.observaciones}</dd></div> : null}
-                    </dl>
-                  ) : pretriage.data.cierreParcial ? (
-                    <>
-                      <div className="notice notice-warning">
-                        La entrevista terminó antes de completar la clasificación automática. La prioridad operativa inicial de la cola es provisional: {priorityLabel(pretriage.data.prioridadPreliminar)}.
-                      </div>
-                      {pretriage.data.mensajesConversacion?.length ? (
-                        <div className="clinical-summary">
-                          <strong>Conversación para contexto</strong>
-                          <ol>
-                            {pretriage.data.mensajesConversacion.map((mensaje, index) => (
-                              <li key={`${mensaje.fechaHoraEnvio ?? "mensaje"}-${index}`}>
-                                <strong>{mensaje.autor === "PACIENTE" ? "Paciente" : "Asistente"}:</strong>{" "}
-                                {mensaje.contenido}
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <div className="notice notice-warning">No hay un resumen clínico estructurado disponible para esta consulta.</div>
-                  )}
-
-                  {!reviewPending && !editingPriority ? (
-                    <div className="priority-reviewed">
-                      <div>
-                        <strong>{partialWithoutAiSummary
-                          ? pretriage.data.estadoRevision === "CONFIRMADA"
-                            ? "Prioridad clínica confirmada por el médico"
-                            : "Prioridad clínica ajustada por el médico"
-                          : pretriage.data.estadoRevision === "CONFIRMADA" ? "Prioridad confirmada" : "Prioridad corregida"}</strong>
-                        <span>{priorityLabel(pretriage.data.prioridadEfectiva)}</span>
-                      </div>
-                      <button className="button button-secondary" onClick={() => setEditingPriority(true)}>Cambiar</button>
-                    </div>
-                  ) : editingPriority ? (
-                    <div className="priority-correction">
-                      <RequiredFieldsNote />
-                      <div className="field">
-                        <label htmlFor="doctor-priority"><RequiredLabel>{partialWithoutAiSummary ? "Prioridad clínica que vas a asignar" : "Nueva prioridad"}</RequiredLabel></label>
-                        <SearchableCombobox
-                          id="doctor-priority"
-                          required
-                          value={correctedPriority}
-                          placeholder="Seleccioná una prioridad"
-                          options={NIVELES_GRAVEDAD_BOT.map((priority) => ({
-                            value: priority,
-                            label: priorityLabel(priority),
-                            disabled: priority === pretriage.data.prioridadPreliminar,
-                          }))}
-                          onChange={setCorrectedPriority}
-                        />
-                      </div>
-                      <label className="field">
-                        <span>Motivo breve</span>
-                        <textarea rows={2} maxLength={500} value={priorityReason} onChange={(event) => setPriorityReason(event.target.value)} placeholder="Ej.: la evaluación clínica no muestra signos de alarma" />
-                      </label>
-                      <div className="priority-actions">
-                        <button className="button button-secondary" disabled={priorityReview.isPending} onClick={() => setEditingPriority(false)}>Cancelar</button>
-                        <button className="button button-primary" disabled={!correctedPriority || priorityReview.isPending} onClick={() => priorityReview.mutate({ decision: "CORREGIR", priority: correctedPriority, reason: priorityReason })}>
-                          {priorityReview.isPending ? "Guardando…" : partialWithoutAiSummary ? "Guardar prioridad clínica" : "Guardar corrección"}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="priority-decision">
-                      <p>{partialWithoutAiSummary
-                        ? "La prioridad operativa inicial es provisional. Confirmá la prioridad clínica que usarás para esta atención o ajustala según tu evaluación."
-                        : "Antes de finalizar, confirmá si la prioridad preliminar fue correcta."}</p>
-                      <div className="priority-actions">
-                        <button className="button button-secondary" disabled={priorityReview.isPending} onClick={() => setEditingPriority(true)}>{partialWithoutAiSummary ? "Ajustar prioridad clínica" : "Modificar prioridad"}</button>
-                        <button className="button button-primary" disabled={priorityReview.isPending} onClick={() => priorityReview.mutate({ decision: "CONFIRMAR" })}>
-                          {priorityReview.isPending ? "Confirmando…" : partialWithoutAiSummary ? "Confirmar prioridad clínica" : "La prioridad es correcta"}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </section>
-              ) : null}
-              <ErrorNotice error={pretriage.error ?? priorityReview.error} />
-              <button className="button button-primary" disabled={consultationAction.isPending || pretriage.isPending || reviewPending || !pretriage.data} onClick={() => consultationAction.mutate("finalizar")}>
+              <ErrorNotice error={priorityReview.error} />
+              <button className="button button-primary" disabled={actionPending || pretriage.isPending || reviewPending || !pretriageData} onClick={() => consultationAction.mutate("finalizar")}>
                 {consultationAction.isPending ? "Finalizando…" : "Finalizar atención"}
               </button>
             </>
-          )}
+          ) : null}
           {feedback ? <div className="notice notice-success">{feedback}</div> : null}
           <ErrorNotice error={consultationAction.error} />
         </section>
@@ -508,8 +668,13 @@ export function DoctorWorkspace({
     <div className="page-stack">
       <header className="page-heading heading-row">
         <div><p className="eyebrow">Sesión {session.estado?.toLowerCase()}</p><h1>Cola de pacientes</h1><p>El orden se actualiza automáticamente cada 5 segundos.</p></div>
-        <button className="button button-primary" disabled={session.estado !== "ACTIVA" || callNext.isPending} onClick={() => callNext.mutate()}>
-          {callNext.isPending ? "Llamando…" : "Llamar próximo"}
+        <button className="button button-primary" disabled={session.estado !== "ACTIVA" || selectNext.isPending || consultationAction.isPending || sessionAction.isPending || !queue.data?.length} onClick={() => {
+          consultationAction.reset();
+          priorityReview.reset();
+          reportDiscrepancy.reset();
+          selectNext.mutate();
+        }}>
+          {selectNext.isPending ? "Seleccionando…" : "Seleccionar próximo paciente"}
         </button>
       </header>
       <div className="stat-grid">
@@ -518,7 +683,7 @@ export function DoctorWorkspace({
         <article className="stat-card"><span>Sesión</span><strong className={session.estado === "ACTIVA" ? "status-ok" : "status-paused"}>{session.estado}</strong></article>
       </div>
       <section className="panel">
-        <div className="panel-heading"><div><h2>Próximos llamados</h2><p>Se muestra solo la información disponible y autorizada por el contrato actual.</p></div></div>
+        <div className="panel-heading"><div><h2>Pacientes en cola</h2><p>Seleccioná el próximo paciente para revisar su caso antes de llamarlo.</p></div></div>
         {queue.isPending ? <div className="loading-card">Actualizando cola…</div> : null}
         {queue.data?.length ? (
           <div className="queue-table" role="table" aria-label="Cola médica">
@@ -530,16 +695,16 @@ export function DoctorWorkspace({
             ))}
           </div>
         ) : !queue.isPending ? <div className="empty-state"><span aria-hidden="true">✓</span><h3>No hay pacientes disponibles</h3><p>La cola se actualizará automáticamente.</p></div> : null}
-        <ErrorNotice error={queue.error ?? callNext.error} />
+        <ErrorNotice error={queue.error ?? selectNext.error ?? consultationAction.error} />
       </section>
       {feedback ? <div className="notice notice-success">{feedback}</div> : null}
       <div className="session-controls">
         {session.estado === "ACTIVA" ? (
-          <button className="button button-secondary" disabled={sessionAction.isPending} onClick={() => sessionAction.mutate("pausar")}>Pausar sesión</button>
+          <button className="button button-secondary" disabled={sessionAction.isPending || selectNext.isPending || consultationAction.isPending} onClick={() => sessionAction.mutate("pausar")}>Pausar sesión</button>
         ) : (
           <button className="button button-secondary" disabled={sessionAction.isPending} onClick={() => sessionAction.mutate("reanudar")}>Reanudar sesión</button>
         )}
-        <button className="button button-danger-ghost" disabled={sessionAction.isPending} onClick={() => sessionAction.mutate("cerrar")}>Cerrar sesión</button>
+        <button className="button button-danger-ghost" disabled={sessionAction.isPending || selectNext.isPending || consultationAction.isPending} onClick={() => sessionAction.mutate("cerrar")}>Cerrar sesión</button>
         <ErrorNotice error={sessionAction.error} />
       </div>
     </div>,

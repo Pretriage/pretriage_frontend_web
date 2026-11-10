@@ -4,11 +4,11 @@
 - Base URL: `http://localhost:8080`
 - Live OpenAPI: `http://localhost:8080/v3/api-docs`
 - Exported snapshot: `contracts/pretriage-openapi.json`
-- Snapshot date: 2026-11-05
-- Snapshot SHA-256: `e64866621d72e08fd569dcb3c9f8b50a690edccaf1e421f5786c08d48c12e718`
+- Hospital administration entries refreshed: 2026-11-09
+- Snapshot SHA-256: `c03482f1ea911ae98ce22c8913c9d1994feddcceb68d74b04e0b51a2635eb61b`
 - OpenAPI version: 3.1.0
 - API title/version: Pretriage API / v1
-- Snapshot size: 86 paths and 79 schemas
+- Snapshot size: 96 paths and 88 schemas
 
 The snapshot and TypeScript types were refreshed from the running backend. They
 include the consultation-scoped partial-pretriage conversation fields and chat
@@ -29,24 +29,21 @@ Snapshot entry: `GET /api/admin/hospitales/{hospitalId}/metricas`.
 
 Authorization:
 
-- Without a session the backend returns `401` (verified live-offline in this
-  session's export refresh).
-- The backend is expected to enforce `exigirAdminHospital` for the selected
-  hospital and respond `403` to an admin of a different hospital, consistent
-  with every other admin hospital route. Live confirmation with a valid
-  `ADMIN_HOSPITAL` session is still pending and must be recorded here when it
-  is available. The web never sends foreign hospital IDs: its page resolves
-  the hospital from the staff membership context.
+- The backend returns `401` without a session and `403` for a hospital
+  outside the administrator's active memberships. The page resolves the
+  selected hospital from the staff membership context.
 
 Business rules (backend-owned; the web only forwards and displays):
 
-- The backend validates the date range and answers `400` with a descriptive
-  `message` for an inverted range (`desde` > `hasta`), dates in the future
-  relative to today, and the maximum admissible range extension (exact
-  ceiling not confirmed from this machine). The web displays that message as
-  a notice and does not normalize or re-validate these rules locally.
-- `serieDiaria` is expected to cover the complete inclusive range including
-  zero-patient days, per the response contract. Live confirmation pending.
+- The date range requires `desde <= hasta <= hoy` in Buenos Aires. Equal
+  dates query one day, including the first day of the current month.
+  Future or inverted dates receive `400`. The form and direct links apply
+  the same validation before querying.
+- `serieDiaria` covers the inclusive range and includes days with zero
+  entries. Both daily counts use the date the case entered the queue.
+- The attended count includes finalized attentions for those arrivals.
+  Completed AI pretriage counts completed chat classifications, and the
+  complement includes reception-only cases.
 
 ### Verification status of this session
 
@@ -62,12 +59,11 @@ Verified against the local backend while implementing the metrics view:
   token) passes through as the normalized `401` message. No bearer tokens
   appear in any response body.
 
-Still pending and to be confirmed live with a valid `ADMIN_HOSPITAL` session:
-
-- `403` for an admin of a different hospital (expected `exigirAdminHospital`).
-- Exact shape and message of the backend `400` for `desde` > `hasta`.
-- The maximum admissible range extension (ceiling).
-- `serieDiaria` coverage of the inclusive range with zero-patient days.
+Verified locally with an active `ADMIN_HOSPITAL` session. A valid range
+returned `200` with every requested day, including days with zero entries.
+The daily counts and both severity distributions matched the period totals.
+The API returned `400` for an inverted range and `403` for a hospital
+outside the active membership.
 
 Response schema (`MetricasHospitalResponse`; all fields optional in the
 generated contract, treated as absent = "-" in the UI):
@@ -287,21 +283,67 @@ POST /api/medico/sesiones/{sesionId}/pausar
 POST /api/medico/sesiones/{sesionId}/reanudar
 POST /api/medico/sesiones/{sesionId}/cerrar
 GET  /api/medico/sesiones/{sesionId}/pacientes-disponibles
-POST /api/medico/sesiones/{sesionId}/llamar-proximo
+POST /api/medico/sesiones/{sesionId}/seleccionar-proximo
+POST /api/medico/sesiones/{sesionId}/consultas/{consultaId}/llamar
+POST /api/medico/sesiones/{sesionId}/consultas/{consultaId}/devolver-a-cola
 POST /api/medico/sesiones/{sesionId}/consultas/{consultaId}/presente
 POST /api/medico/sesiones/{sesionId}/consultas/{consultaId}/ausente
 GET  /api/medico/sesiones/{sesionId}/consultas/{consultaId}/pretriaje
+GET  /api/medico/sesiones/{sesionId}/consultas/{consultaId}/datos-clinicos
+GET  /api/medico/sesiones/{sesionId}/consultas/{consultaId}/datos-clinicos/estudios/{estudioId}/archivo
 PUT  /api/medico/sesiones/{sesionId}/consultas/{consultaId}/revision-prioridad
+GET  /api/medico/sesiones/{sesionId}/consultas/{consultaId}/discrepancia-sintomas
+PUT  /api/medico/sesiones/{sesionId}/consultas/{consultaId}/discrepancia-sintomas
 POST /api/medico/sesiones/{sesionId}/consultas/{consultaId}/finalizar
 GET  /api/medico/atenciones
 ```
 
-The API supports the complete planned medical-session flow. During `EN_ATENCION`, the frontend retrieves the normalized pretriage summary and requires the doctor to review priority before finalization. `CONFIRMAR` is one click. `CORREGIR` requires a different priority and accepts an optional reason of at most 500 characters. A genuine change is audited; an identical retry is idempotent. The review can be changed while attention remains open, and finalization is rejected with `409` while it is pending.
+Selecting takes the first queue entry in backend order, returns `EN_REVISION`
+and assigns it to the session for review. `GET /api/medico/sesiones/actual`
+restores the selected consultation after reload. The doctor explicitly advances
+to `LLAMADO` or returns it to `EN_COLA`. After the patient is marked present,
+the attention enters `EN_ATENCION`.
+
+The frontend reads the consultation-scoped pretriage summary throughout
+`EN_REVISION`, `LLAMADO`, and `EN_ATENCION`. It reads the additional clinical
+data in the pre-call review and in-attention views.
+Clinical data includes birth date, biological and self-identified gender, weight
+in kg, height in cm, and uploaded study metadata. The browser requests each
+attachment through the staff BFF only upon clicking its preview. Supported PDFs
+and raster images display in the page. Other formats appear in the history list
+with a preview-unavailable label and a manual download button. The BFF restricts
+preview content types and returns `Cache-Control: private, no-store`.
+
+The clinical panel appears when there is a recorded weight, height, or at least
+one uploaded study. Identification fields captured by reception are displayed
+alongside clinical data when it exists. The BFF treats Spring's legacy
+`404 Recurso no encontrado.` for the optional clinical-data and discrepancy
+reads as unavailable information. Consultation errors and writes retain their
+original status. Attachment storage failures appear beside the requested file.
+
+During `EN_ATENCION` the doctor reviews priority before finalization.
+`CONFIRMAR` is one click. `CORREGIR` requires a different priority and accepts
+an optional reason of at most 500 characters. A genuine change is audited and
+an identical retry is idempotent. The review can be changed while attention
+remains open, and finalization is rejected with `409` while it is pending.
+After confirming or correcting, the web shows the effective priority and
+**Cambiar**. This opens the decision buttons for confirming and correcting,
+plus the compact report action beside the priority badge when eligible.
+**Modificar prioridad** opens the
+correction form, and **Cancelar** in that form returns to the decision buttons.
+
+The discrepancy action requires confirmation in a dialog. Its PUT has no
+request body. The backend returns `{ registrada, puedeRegistrar }` for read
+and write operations and authorizes the doctor assigned to the active attention.
+When `registrada` is true, the same corner shows a disabled
+«Discrepancia registrada». The backend allows one report per attention,
+including reports later annulled. Reporting is independent of the clinical
+priority review.
 
 The consultation-scoped pretriage response includes `estadoClasificacion`,
 `cierreParcial` and `mensajesConversacion`. For a `PARCIAL` closure without a
-valid AI result, the web shows the literal conversation in the same in-attention
-consultation view and marks the initial queue priority as provisional. The
+valid AI result, the web shows the literal conversation in all three states
+and marks the initial queue priority as provisional. The
 existing priority review flow remains available; the patient is not assigned a
 second consultation or queue entry.
 
@@ -338,6 +380,23 @@ administration. The frontend no longer infers one global role by probing recepti
 and medicine endpoints. See `docs/staff-access-and-invitations-plan.md` for routes,
 implemented scope and the remaining Universal Login/mail hardening work.
 
+### Hospital discrepancy administration
+
+```http
+GET  /api/admin/hospitales/{hospitalId}/discrepancias
+POST /api/admin/hospitales/{hospitalId}/discrepancias/{discrepanciaId}/anular
+```
+
+The hospital administrator sees each hospital record's patient name and DNI,
+reporting doctor, timestamp, status and the patient's current sanction across
+hospitals. The response includes `sancion` with `vigente`, `permanente` and
+nullable `fechaFin`. The browser uses the session BFF and keeps the list in
+memory. Annulling sends no request body after confirmation, returns `204`,
+and refreshes the list and audit activity. An already annulled record
+returns `409`. The backend validates the selected hospital, records the
+annulment and recalculates digital access. Patients continue to be admitted
+through reception during a sanction.
+
 After login, one active membership redirects directly to its primary module; several
 memberships show only a hospital selector. Roles are capabilities in the shared
 hospital navigation rather than a second workspace choice.
@@ -369,6 +428,14 @@ Hospital administration also includes medical coordination. The former
 `COORDINADOR_MEDICO` value was removed from the public contract and existing data is
 converted to `ADMIN_HOSPITAL` during backend startup.
 
+The hospital administrator changes one assigned role with
+`PATCH /api/admin/hospitales/{hospitalId}/membresias/{membresiaId}/roles/{rol}`
+and `{ estado: "SUSPENDIDA" | "ACTIVA" }`. Personnel responses include the
+assigned roles and `rolesSuspendidos`. The `/api/staff/me` context exposes
+effective roles in `roles` and omits memberships without effective roles.
+The endpoint returns `409` when suspending the last active administrator or
+when the selected clinical role has an open session at that hospital.
+
 Hospital administrators manage the specialties offered by their hospital and its
 rooms through:
 
@@ -397,13 +464,18 @@ Verified against `HospitalConfigurationController`, `HospitalConfigurationDtos`,
 `HospitalConfigurationService` and its focused service tests in the local backend.
 All configuration operations require `exigirAdminHospital` for the selected hospital.
 
-- Configuration returns `especialidades`, `salas` and `sectores`.
+- Configuration returns `especialidades`, `salas`, `sectores` and
+  `salasOcupadasIds`. The occupied IDs are distinct hospital rooms with an
+  active or paused medical session. The configuration screen refreshes
+  this endpoint every 30 seconds while visible.
 - A sector has `id`, `nombre`, `activa`, `especialidadId`,
   `especialidadCodigo` and `especialidadNombre`.
 - Creating a sector accepts `{ nombre, especialidadId }` and creates it active.
   Updating accepts `{ nombre, especialidadId, activa }` (all required).
   Names are trimmed, required, at most 100 characters and unique ignoring case
-  within the hospital. The specialty must be enabled in that hospital.
+  within the hospital. Creating or activating a sector or changing its
+  specialty requires an enabled specialty. An existing sector can be
+  deactivated with its current specialty even after that specialty is disabled.
 - Room responses additionally include nullable `sectorId` and `sectorNombre`.
   Room creation/update still accepts only `{ nombre, especialidadId }`; the sector
   is in the path. The specialty must match the sector, and room names are unique
@@ -411,8 +483,10 @@ All configuration operations require `exigirAdminHospital` for the selected hosp
 - Editing a sector is rejected if its rooms have patients with nonterminal
   consultations. Saving `activa: false` deactivates all its rooms. Reactivating a
   sector does not reactivate those rooms.
-- Deletion also rejects active or paused medical sessions in its rooms. A successful
-  deletion removes the sector and its rooms and returns `204`.
+- Deletion returns `409` for pending patients or active or paused sessions.
+  It returns `204` for unused sectors and for sectors with only historical
+  references. The latter are archived with their rooms and omitted from
+  configuration and room totals.
 - Manageable sector sessions include `id`, `medicoId`, `medicoNombre`, `estado`,
   `sectorId`, `sectorNombre`, `salaId`, `salaNombre`, `codigoEspecialidad`,
   `nombreEspecialidad` and `fechaHoraInicio`. The list includes only active or paused sessions (`ACTIVA`/`PAUSADA`)
@@ -425,9 +499,9 @@ All configuration operations require `exigirAdminHospital` for the selected hosp
   history. A `409` conflict is surfaced in the confirmation dialog, which remains
   open so the administrator can read the backend reason. Paused sessions are not offered
   as a separate pause action because pausing does not release the room.
-- The web groups rooms under sectors, derives room specialty from the sector,
+- The web presents separate tables for specialties and sector/room inventory, derives room specialty from the sector,
   confirms destructive deletion, disables configuration actions while pending and
-  refetches configuration/audit after both successful and failed mutations.
+  refetches configuration after both successful and failed mutations.
   Unassigned legacy rooms are displayed read-only; there is no reassignment route.
 
 Current backend contract limitations (not changed by this frontend integration):

@@ -80,10 +80,10 @@ export async function publicBackendRequest<T>(
   return payload as T;
 }
 
-export async function backendRequest<T>(
+export async function backendResponse(
   path: string,
   init: RequestInit = {},
-): Promise<T> {
+): Promise<Response> {
   const session = await getSession();
   if (!session) throw new BackendApiError(401, "La sesión expiró.");
 
@@ -113,18 +113,27 @@ export async function backendRequest<T>(
     throw new BackendApiError(502, SERVICE_UNAVAILABLE_ERROR);
   }
 
-  if (response.status === 204) return null as T;
-  const contentType = response.headers.get("content-type") ?? "";
-  const payload: unknown = contentType.includes("application/json")
-    ? await response.json()
-    : null;
-
   if (!response.ok) {
+    const payload = await readJson(response);
     throw new BackendApiError(
       response.status,
       responseErrorMessage(response.status, payload),
     );
   }
 
-  return payload as T;
+  return response;
+}
+
+function readJson(response: Response): Promise<unknown> {
+  return response.headers.get("content-type")?.includes("application/json")
+    ? response.json()
+    : Promise.resolve(null);
+}
+
+export async function backendRequest<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await backendResponse(path, init);
+  return response.status === 204 ? null as T : await readJson(response) as T;
 }

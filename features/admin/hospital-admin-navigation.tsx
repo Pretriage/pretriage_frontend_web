@@ -1,43 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useSyncExternalStore } from "react";
+import type { HospitalAdminSectionId } from "./hospital-admin-sections";
+import { hospitalAdminSections } from "./hospital-admin-sections";
 
-const sections = [
-  { id: "admin-invite", label: "Invitar personal" },
-  { id: "hospital-configuration-heading", label: "Especialidades y salas" },
-  { id: "admin-personnel", label: "Personal" },
-  { id: "admin-invitations", label: "Invitaciones" },
-  { id: "admin-audit", label: "Auditoría" },
-];
+type NavigationSection = HospitalAdminSectionId;
 
-function subscribe(onChange: () => void) {
-  window.addEventListener("hashchange", onChange);
-  return () => window.removeEventListener("hashchange", onChange);
-}
-
-export function HospitalAdminNavigation({ hospitalId }: { hospitalId: number }) {
-  const hash = useSyncExternalStore(subscribe, () => window.location.hash, () => "");
-  const activeId = sections.find((item) => `#${item.id}` === hash)?.id ?? sections[0].id;
-
+export function HospitalAdminNavigation({ hospitalId, activeSection }: { hospitalId: number; activeSection: NavigationSection }) {
   return (
     <>
-      <Link
-        className="nav-item nav-subitem"
-        href={`/admin/hospital/metricas?hospitalId=${hospitalId}`}
-      >
-        <span className="nav-dot" aria-hidden="true" />Métricas
-      </Link>
-      {sections.map(({ id, label }) => (
-        <a
+      {hospitalAdminSections.map(({ id, label }) => (
+        <Link
           key={id}
-          href={`#${id}`}
-          className={`nav-item nav-subitem${activeId === id ? " nav-item-active" : ""}`}
-          aria-current={activeId === id ? "location" : undefined}
-          onClick={() => document.getElementById(id)?.focus({ preventScroll: true })}
+          href={`/admin/hospital/${id}?hospitalId=${hospitalId}`}
+          className={`nav-item nav-subitem${activeSection === id ? " nav-item-active" : ""}`}
+          aria-current={activeSection === id ? "page" : undefined}
         >
           <span className="nav-dot" aria-hidden="true" />{label}
-        </a>
+        </Link>
       ))}
     </>
   );

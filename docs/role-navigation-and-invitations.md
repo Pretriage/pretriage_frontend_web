@@ -18,7 +18,9 @@ Después de autenticar:
 2. Con una membresía activa se ingresa automáticamente al hospital.
 3. Con varias membresías se elige solamente el hospital.
 4. Dentro del hospital, Recepción, Atención médica y Administración aparecen en la
-   misma navegación según los roles de la membresía.
+   misma navegación según los roles de la membresía. La administración hospitalaria
+   abre directamente Especialidades y salas y ofrece, en orden, Métricas, Invitar
+   personal, Gestionar personal y Anular penalizaciones.
 5. `ADMIN_HOSPITAL` combinado con un rol operativo no cambia la portada: se ingresa
    al módulo operativo y Administración queda disponible en el menú.
 6. La administración de plataforma es global y permanece separada de las
@@ -40,6 +42,8 @@ entre ambos sin volver a elegir una función.
 ```
 
 El `hospitalId` orienta la interfaz, pero nunca concede autoridad.
+La raíz de administración abre la configuración; las antiguas rutas `inicio` y
+`auditoria` redirigen allí y conservan `hospitalId`.
 
 ## Modelo de invitaciones
 

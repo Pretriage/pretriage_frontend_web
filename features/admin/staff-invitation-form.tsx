@@ -19,6 +19,7 @@ export type StaffInvitationDto = {
 
 type FormErrors = Partial<Record<"email" | "roles" | "matricula" | "tipoMatricula" | "jurisdiccionMatricula" | "especialidadIds", string>>;
 type Props = {
+  configurationHref: string;
   configuration?: HospitalConfiguration;
   disabled?: boolean;
   error?: Error | null;
@@ -33,7 +34,7 @@ const roleInfo: Array<{ value: StaffRole; label: string; description: string }> 
   { value: "ADMIN_HOSPITAL", label: "Administración hospitalaria", description: "Personal, especialidades, sectores y salas." },
 ];
 
-export function StaffInvitationForm({ configuration, disabled = false, error, deliveryMessage, createdToken, onSubmit }: Props) {
+export function StaffInvitationForm({ configurationHref, configuration, disabled = false, error, deliveryMessage, createdToken, onSubmit }: Props) {
   const [email, setEmail] = useState("");
   const [roles, setRoles] = useState<StaffRole[]>([]);
   const [matricula, setMatricula] = useState("");
@@ -179,7 +180,7 @@ export function StaffInvitationForm({ configuration, disabled = false, error, de
         <div className={styles.specialtyGrid} aria-describedby={errors.especialidadIds ? "invite-specialty-error" : undefined}>{visibleSpecialties.map((specialty, index) => <label className={styles.checkCard} key={specialty.id}>
         <input ref={index === 0 ? specialtyRef : undefined} type="checkbox" checked={specialtyIds.includes(specialty.id)} onChange={() => setSpecialtyIds((current) => current.includes(specialty.id) ? current.filter((id) => id !== specialty.id) : [...current, specialty.id])} aria-invalid={index === 0 ? invalid("especialidadIds") : undefined} aria-describedby={index === 0 && errors.especialidadIds ? "invite-specialty-error" : undefined} />
         <span className={styles.checkCopy}><strong>{specialty.nombre}</strong></span>
-      </label>)}</div></> : <p className={styles.catalogEmpty}>No hay especialidades habilitadas. Podés activarlas desde <a href="#hospital-configuration-heading">Configuración del hospital</a>.</p>}
+      </label>)}</div></> : <p className={styles.catalogEmpty}>No hay especialidades habilitadas. Podés activarlas desde <a href={configurationHref}>Configuración del hospital</a>.</p>}
       {errors.especialidadIds ? <p className={styles.error} id="invite-specialty-error">{errors.especialidadIds}</p> : null}
     </fieldset> : null}
 

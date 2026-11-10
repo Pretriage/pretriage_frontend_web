@@ -42,6 +42,12 @@ export function formatoPorcentajeEntero(valor?: number | null) {
     : null;
 }
 
+/** Proporción visual sin el truncado que se aplica a la etiqueta. */
+export function porcentajeGrafico(valor?: number | null, techo = 100) {
+  const numero = typeof valor === "number" && Number.isFinite(valor) ? valor : 0;
+  return Math.max(0, Math.min(100, (numero / techo) * 100));
+}
+
 /** Porcentaje de una parte sobre el total; el truncado final lo hace el anillo. */
 export function porcentajeDesdeConteos(parte?: number | null, total?: number | null) {
   if (
@@ -61,14 +67,14 @@ type ErroresDeRango = { desde?: string; hasta?: string };
 const MENSAJES = {
   desdeObligatoria: "La fecha desde es obligatoria.",
   desdeInvalida: "La fecha desde no es válida.",
-  desdeNoAnterior: "La fecha desde debe ser anterior a hoy.",
+  desdePosterior: "La fecha desde debe ser hoy o anterior.",
   hastaObligatoria: "La fecha hasta es obligatoria.",
   hastaInvalida: "La fecha hasta no es válida.",
   hastaPosterior: "La fecha hasta debe ser hoy o anterior.",
-  rangoInvertido: "La fecha hasta debe ser mayor o igual que la fecha desde.",
+  rangoInvertido: "La fecha hasta debe ser igual o posterior a la fecha desde.",
 } as const;
 
-/** Reglas del rango: desde < hoy (estricto), hasta <= hoy, hasta >= desde. */
+/** Reglas del rango inclusivo: desde <= hasta <= hoy. */
 export function validarRangoFechas(
   desde: string,
   hasta: string,
@@ -78,7 +84,7 @@ export function validarRangoFechas(
 
   if (!desde.trim()) errores.desde = MENSAJES.desdeObligatoria;
   else if (!fechaIsoValida(desde)) errores.desde = MENSAJES.desdeInvalida;
-  else if (desde >= hoy) errores.desde = MENSAJES.desdeNoAnterior;
+  else if (desde > hoy) errores.desde = MENSAJES.desdePosterior;
 
   if (!hasta.trim()) errores.hasta = MENSAJES.hastaObligatoria;
   else if (!fechaIsoValida(hasta)) errores.hasta = MENSAJES.hastaInvalida;
@@ -87,6 +93,19 @@ export function validarRangoFechas(
     errores.hasta = MENSAJES.rangoInvertido;
 
   return errores;
+}
+
+/** Preset del mes actual, calculado con el día ISO de Argentina. */
+export function rangoEsteMes(hoy = hoyIso()) {
+  return { desde: `${hoy.slice(0, 7)}-01`, hasta: hoy };
+}
+
+/** Mes calendario anterior completo, incluido el cambio de año. */
+export function rangoMesAnterior(hoy = hoyIso()) {
+  const primerDiaMesActual = new Date(`${hoy.slice(0, 7)}-01T00:00:00.000Z`);
+  primerDiaMesActual.setUTCDate(0);
+  const ultimoDiaAnterior = primerDiaMesActual.toISOString().slice(0, 10);
+  return { desde: `${ultimoDiaAnterior.slice(0, 7)}-01`, hasta: ultimoDiaAnterior };
 }
 
 /** Validación de formulario y de parámetros de URL con los mismos mensajes. */

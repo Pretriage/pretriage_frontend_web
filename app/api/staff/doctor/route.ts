@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { apiErrorResponse } from "@/lib/api/route";
-import { backendRequest } from "@/lib/api/server";
+import { BackendApiError, backendRequest, backendResponse } from "@/lib/api/server";
 import type {
   CurrentMedicalState,
+  ConsultationClinicalData,
   ConsultationPretriage,
   DoctorAssignment,
   DoctorBootstrap,
@@ -12,9 +13,36 @@ import type {
   MedicalSession,
   QueueConsultation,
   PriorityReviewRequest,
+  SymptomsDiscrepancy,
 } from "@/lib/api/types";
 
 type Body = Record<string, unknown> & { operation?: string };
+const noStore = { "Cache-Control": "private, no-store" };
+
+function consultationPath(body: Body) {
+  const sessionId = numberValue(body.sessionId, "sessionId");
+  const consultationId = numberValue(body.consultationId, "consultationId");
+  return `/api/medico/sesiones/${sessionId}/consultas/${consultationId}`;
+}
+
+async function optionalConsultationData<T>(path: string): Promise<T | null> {
+  try {
+    return await backendRequest<T>(path);
+  } catch (error) {
+    // Older backends answer with Spring's missing-route response for optional reads.
+    if (error instanceof BackendApiError && error.status === 404 && error.message === "Recurso no encontrado.") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function previewContentType(value: string | null) {
+  const type = value?.split(";")[0]?.trim().toLowerCase() ?? "";
+  return ["application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"].includes(type)
+    ? type
+    : null;
+}
 
 function numberValue(value: unknown, field: string) {
   if (typeof value !== "number" || !Number.isSafeInteger(value)) {
@@ -95,41 +123,82 @@ export async function POST(request: Request) {
           ),
         );
       }
-      case "callNext": {
+      case "selectNext": {
         const sessionId = numberValue(body.sessionId, "sessionId");
         return NextResponse.json(
           await backendRequest<QueueConsultation>(
-            `/api/medico/sesiones/${sessionId}/llamar-proximo`,
+            `/api/medico/sesiones/${sessionId}/seleccionar-proximo`,
             { method: "POST" },
           ),
         );
       }
       case "consultationAction": {
-        const sessionId = numberValue(body.sessionId, "sessionId");
-        const consultationId = numberValue(body.consultationId, "consultationId");
         const action = body.action;
-        if (!["presente", "ausente", "finalizar"].includes(String(action))) {
+        if (!["llamar", "devolver-a-cola", "presente", "ausente", "finalizar"].includes(String(action))) {
           throw new TypeError("Acción de consulta inválida.");
         }
         return NextResponse.json(
           await backendRequest<QueueConsultation>(
-            `/api/medico/sesiones/${sessionId}/consultas/${consultationId}/${action}`,
+            `${consultationPath(body)}/${action}`,
             { method: "POST" },
           ),
         );
       }
       case "pretriage": {
-        const sessionId = numberValue(body.sessionId, "sessionId");
-        const consultationId = numberValue(body.consultationId, "consultationId");
         return NextResponse.json(
           await backendRequest<ConsultationPretriage>(
-            `/api/medico/sesiones/${sessionId}/consultas/${consultationId}/pretriaje`,
+            `${consultationPath(body)}/pretriaje`,
           ),
+          { headers: noStore },
         );
       }
+      case "clinicalData":
+        return NextResponse.json(
+          await optionalConsultationData<ConsultationClinicalData>(`${consultationPath(body)}/datos-clinicos`),
+          { headers: noStore },
+        );
+      case "clinicalFile":
+      case "downloadClinicalFile": {
+        const studyId = numberValue(body.studyId, "studyId");
+        const file = await backendResponse(
+          `${consultationPath(body)}/datos-clinicos/estudios/${studyId}/archivo`,
+          {
+            headers: { Accept: "*/*" },
+            signal: AbortSignal.any([request.signal, AbortSignal.timeout(60_000)]),
+          },
+        );
+        const type = body.operation === "downloadClinicalFile"
+          ? "application/octet-stream"
+          : previewContentType(file.headers.get("content-type"));
+        if (!type || !file.body) {
+          await file.body?.cancel();
+          return NextResponse.json(
+            { message: "Este formato de archivo no admite vista previa." },
+            { status: 415, headers: noStore },
+          );
+        }
+        return new Response(file.body, {
+          headers: {
+            ...noStore,
+            "Content-Type": type,
+            "X-Content-Type-Options": "nosniff",
+          },
+        });
+      }
+      case "symptomsDiscrepancy":
+        return NextResponse.json(
+          await optionalConsultationData<SymptomsDiscrepancy>(`${consultationPath(body)}/discrepancia-sintomas`),
+          { headers: noStore },
+        );
+      case "reportSymptomsDiscrepancy":
+        return NextResponse.json(
+          await backendRequest<SymptomsDiscrepancy>(
+            `${consultationPath(body)}/discrepancia-sintomas`,
+            { method: "PUT" },
+          ),
+          { headers: noStore },
+        );
       case "reviewPriority": {
-        const sessionId = numberValue(body.sessionId, "sessionId");
-        const consultationId = numberValue(body.consultationId, "consultationId");
         const decision = body.decision;
         if (!['CONFIRMAR', 'CORREGIR'].includes(String(decision))) {
           throw new TypeError("Decisión de prioridad inválida.");
@@ -144,9 +213,10 @@ export async function POST(request: Request) {
         };
         return NextResponse.json(
           await backendRequest<ConsultationPretriage>(
-            `/api/medico/sesiones/${sessionId}/consultas/${consultationId}/revision-prioridad`,
+            `${consultationPath(body)}/revision-prioridad`,
             { method: "PUT", body: JSON.stringify(review) },
           ),
+          { headers: noStore },
         );
       }
       default:

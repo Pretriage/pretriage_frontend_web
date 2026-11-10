@@ -422,7 +422,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
           <label className="field"><RequiredLabel>DNI</RequiredLabel><input aria-required="true" autoFocus disabled={searchPatient.isPending} inputMode="numeric" placeholder="Ej. 12345678" {...dniForm.register("dni", { onChange: () => setSearchError(null) })} /><FieldError message={dniForm.formState.errors.dni?.message} /></label>
           {searchError ? <div className="notice notice-error" role="alert">{searchError}</div> : null}
           <div className="form-actions">
-            <button className="button button-secondary" disabled={searchPatient.isPending} type="button" onClick={resetFlow}>Cancelar</button>
+            <button className="button button-secondary" disabled={searchPatient.isPending} type="button" onClick={resetFlow}>Volver</button>
             <button className="button button-primary" disabled={searchPatient.isPending} type="submit">{searchPatient.isPending ? "Buscando…" : "Buscar paciente"}</button>
           </div>
         </form>
@@ -554,7 +554,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
               <label className="field"><span>Código postal</span><input {...patientForm.register("codigoPostal")} /></label>
             </div>
             <div className="form-actions">
-              <button className="button button-secondary" disabled={createAdmission.isPending} type="button" onClick={resetFlow}>Cancelar admisión</button>
+              <button className="button button-secondary" disabled={createAdmission.isPending} type="button" onClick={() => setStage("search")}>Volver</button>
               <button className="button button-primary" disabled={createAdmission.isPending} type="submit">
                 {createAdmission.isPending ? "Creando…" : "Crear admisión"}
               </button>
@@ -641,7 +641,7 @@ export function ReceptionWorkspace({ userName, hospitalId, hospitalName, roles, 
           </aside>
         </section>
         <div className="form-actions">
-          <button className="button button-secondary" disabled={finalizeAdmission.isPending} onClick={() => setStage("triage")}>Editar</button>
+          <button className="button button-secondary" disabled={finalizeAdmission.isPending} onClick={() => setStage("triage")}>Volver</button>
           <button
             className="button button-primary"
             disabled={finalizeAdmission.isPending}

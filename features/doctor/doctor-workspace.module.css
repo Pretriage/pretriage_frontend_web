@@ -1,0 +1,39 @@
+.summaryCorner {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.discrepancyAction {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.discrepancyAction:focus-visible {
+  outline: 3px solid #245f91;
+  outline-offset: 2px;
+}
+
+.discrepancyAction:disabled {
+  color: #53636d;
+  text-decoration: none;
+}
+
+@media (max-width: 600px) {
+  .summaryCorner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .discrepancyAction {
+    flex: 0 1 auto;
+    text-align: center;
+  }
+}

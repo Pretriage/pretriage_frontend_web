@@ -29,6 +29,9 @@ export type QueueConsultation = ApiSchemas["ConsultaLlamadaDTO"];
 export type MedicalAttention = ApiSchemas["AtencionMedicaDTO"];
 export type ConsultationPretriage = ApiSchemas["PretriajeConsultaDTO"];
 export type PriorityReviewRequest = ApiSchemas["RevisionPrioridadRequest"];
+export type ClinicalStudy = ApiSchemas["Estudio"] & { id: number };
+export type ConsultationClinicalData = ApiSchemas["DatosClinicosConsultaDTO"];
+export type SymptomsDiscrepancy = ApiSchemas["DiscrepanciaSintomasDTO"];
 export type CreatePatientCredential = ApiSchemas["CredencialRequest"];
 export type PatientCredential = ApiSchemas["CredencialResponse"] & {
   nombreObraSocial?: string;

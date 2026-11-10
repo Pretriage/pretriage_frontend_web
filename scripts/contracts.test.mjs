@@ -5,6 +5,9 @@ import path from "node:path";
 import test from "node:test";
 import vm from "node:vm";
 import { NextRequest, NextResponse } from "next/server.js";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import * as jsxRuntime from "react/jsx-runtime";
 import ts from "typescript";
 import { z } from "zod";
 
@@ -16,6 +19,7 @@ function loadTypeScript(relativePath, { fetch = globalThis.fetch, require = () =
       module: ts.ModuleKind.CommonJS,
       target: ts.ScriptTarget.ES2020,
       esModuleInterop: true,
+      jsx: ts.JsxEmit.ReactJSX,
     },
     fileName: filename,
   }).outputText;
@@ -52,6 +56,32 @@ test("las fechas de la web usan DD/MM/AAAA y el día de Argentina", () => {
   const { min, max } = receptionDate.rangoFechaNacimiento("2020-02-29");
   assert.equal(min, "1900-02-28");
   assert.equal(max, "2020-02-28");
+});
+
+test("métricas valida el rango y conserva la proporción real en los gráficos", () => {
+  const argentinaDate = loadTypeScript("lib/argentina-date.ts");
+  const severity = loadTypeScript("lib/severity.ts");
+  const { formatoPorcentajeEntero, porcentajeGrafico, validarRangoFechas, rangoEsteMes, rangoMesAnterior } = loadTypeScript("features/admin/hospital-metrics.ts", {
+    require: (specifier) => ({
+      zod: { z },
+      "@/lib/argentina-date": argentinaDate,
+      "@/lib/severity": severity,
+    }[specifier] ?? {}),
+  });
+  const today = "2026-11-09";
+  const rangeError = "La fecha hasta debe ser igual o posterior a la fecha desde.";
+  assert.equal(Object.keys(validarRangoFechas("2026-11-08", "2026-11-08", today)).length, 0);
+  assert.equal(validarRangoFechas("2026-11-08", "2026-11-07", today).hasta, rangeError);
+  assert.deepEqual(Object.keys(validarRangoFechas("2026-11-08", today, today)), []);
+  assert.deepEqual({ ...rangoEsteMes("2026-11-01") }, { desde: "2026-11-01", hasta: "2026-11-01" });
+  assert.deepEqual({ ...rangoEsteMes("2026-11-09") }, { desde: "2026-11-01", hasta: "2026-11-09" });
+  assert.deepEqual({ ...rangoMesAnterior("2026-01-01") }, { desde: "2025-12-01", hasta: "2025-12-31" });
+  assert.deepEqual({ ...rangoMesAnterior("2024-03-01") }, { desde: "2024-02-01", hasta: "2024-02-29" });
+  assert.equal(formatoPorcentajeEntero(0.5), 0);
+  assert.equal(porcentajeGrafico(0.5), 0.5);
+  assert.equal(porcentajeGrafico(0), 0);
+  assert.equal(porcentajeGrafico(null), 0);
+  assert.equal(porcentajeGrafico(3, 8), 37.5);
 });
 
 test("recepción ofrece planes publicados por prestador y conserva sus nombres", () => {
@@ -232,6 +262,143 @@ test("la ruta médica usa sectores, salas sectorizadas y envía sectorId al inic
   });
 });
 
+test("la ruta médica separa selección, llamado y devolución y limita los adjuntos a vistas previas", async () => {
+  const calls = [];
+  let fileType = "application/pdf";
+  const route = loadTypeScript("app/api/staff/doctor/route.ts", {
+    require: (specifier) => ({
+      "next/server": { NextResponse },
+      "@/lib/api/route": {
+        apiErrorResponse: (error) => Response.json({ message: error.message }, { status: error.status ?? 500 }),
+      },
+      "@/lib/api/server": {
+        backendRequest: async (url, init = {}) => {
+          calls.push([url, init.method ?? "GET", init.body ? JSON.parse(init.body) : null]);
+          return {};
+        },
+        backendResponse: async (url) => {
+          calls.push([url, "GET", null]);
+          return new Response("archivo", {
+            headers: { "Content-Type": fileType, "Content-Disposition": 'attachment; filename="estudio.pdf"' },
+          });
+        },
+      },
+    })[specifier],
+  });
+  const post = (operation, payload = {}) => route.POST(new Request("http://localhost/api/staff/doctor", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ operation, sessionId: 12, consultationId: 7, ...payload }),
+  }));
+
+  assert.equal((await post("selectNext")).status, 200);
+  assert.equal((await post("consultationAction", { action: "llamar" })).status, 200);
+  assert.equal((await post("consultationAction", { action: "devolver-a-cola" })).status, 200);
+  assert.equal((await post("clinicalData")).status, 200);
+  assert.equal((await post("symptomsDiscrepancy")).status, 200);
+  assert.equal((await post("reportSymptomsDiscrepancy")).status, 200);
+
+  const preview = await post("clinicalFile", { studyId: 5 });
+  assert.equal(preview.headers.get("Content-Type"), "application/pdf");
+  assert.equal(preview.headers.get("Content-Disposition"), null);
+  assert.match(preview.headers.get("Cache-Control"), /no-store/);
+  assert.equal(await preview.text(), "archivo");
+
+  fileType = "image/svg+xml";
+  assert.equal((await post("clinicalFile", { studyId: 5 })).status, 415);
+  assert.equal((await post("clinicalFile", { studyId: "../5" })).status, 400);
+  const download = await post("downloadClinicalFile", { studyId: 5 });
+  assert.equal(download.headers.get("Content-Type"), "application/octet-stream");
+  assert.equal(download.headers.get("X-Content-Type-Options"), "nosniff");
+  assert.equal(download.headers.get("Content-Disposition"), null);
+  assert.equal(await download.text(), "archivo");
+
+  const sessionPath = "/api/medico/sesiones/12";
+  const consultationPath = `${sessionPath}/consultas/7`;
+  const filePath = `${consultationPath}/datos-clinicos/estudios/5/archivo`;
+  assert.deepEqual(calls, [
+    [`${sessionPath}/seleccionar-proximo`, "POST", null],
+    [`${consultationPath}/llamar`, "POST", null],
+    [`${consultationPath}/devolver-a-cola`, "POST", null],
+    [`${consultationPath}/datos-clinicos`, "GET", null],
+    [`${consultationPath}/discrepancia-sintomas`, "GET", null],
+    [`${consultationPath}/discrepancia-sintomas`, "PUT", null],
+    [filePath, "GET", null],
+    [filePath, "GET", null],
+    [filePath, "GET", null],
+  ]);
+});
+
+test("la ruta médica tolera endpoints opcionales ausentes sin ocultar errores de consulta ni mutaciones", async () => {
+  class BackendApiError extends Error {
+    constructor(status, message) {
+      super(message);
+      this.status = status;
+    }
+  }
+  let error = new BackendApiError(404, "Recurso no encontrado.");
+  const route = loadTypeScript("app/api/staff/doctor/route.ts", {
+    require: (specifier) => ({
+      "next/server": { NextResponse },
+      "@/lib/api/route": {
+        apiErrorResponse: (failure) => Response.json({ message: failure.message }, { status: failure.status ?? 500 }),
+      },
+      "@/lib/api/server": {
+        BackendApiError,
+        backendRequest: async () => { throw error; },
+        backendResponse: async () => { throw error; },
+      },
+    })[specifier],
+  });
+  const post = (operation, payload = {}) => route.POST(new Request("http://localhost/api/staff/doctor", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ operation, sessionId: 12, consultationId: 7, ...payload }),
+  }));
+
+  for (const operation of ["clinicalData", "symptomsDiscrepancy"]) {
+    const response = await post(operation);
+    assert.equal(response.status, 200);
+    assert.equal(await response.json(), null);
+    assert.match(response.headers.get("Cache-Control"), /no-store/);
+  }
+  assert.equal((await post("reportSymptomsDiscrepancy")).status, 404);
+  assert.equal((await post("clinicalFile", { studyId: 5 })).status, 404);
+  assert.equal((await post("pretriage")).status, 404);
+
+  error = new BackendApiError(404, "Atención en curso no encontrada en la sesión");
+  assert.equal((await post("clinicalData")).status, 404);
+  assert.equal((await post("symptomsDiscrepancy")).status, 404);
+
+  error = new BackendApiError(403, "No tiene permisos sobre la sesión");
+  assert.equal((await post("clinicalData")).status, 403);
+
+  error = new BackendApiError(503, "El archivo no está disponible en este momento.");
+  assert.equal((await post("clinicalFile", { studyId: 5 })).status, 503);
+});
+
+test("la ficha clínica omite los pacientes de recepción con solo datos de identificación", () => {
+  const argentinaDate = loadTypeScript("lib/argentina-date.ts");
+  const { ClinicalHistory } = loadTypeScript("features/doctor/clinical-history.tsx", {
+    require: (specifier) => ({
+      react: React,
+      "react/jsx-runtime": jsxRuntime,
+      "@/lib/argentina-date": argentinaDate,
+      "./pdf-preview": {},
+    })[specifier],
+  });
+  const markup = (data) => renderToStaticMarkup(React.createElement(ClinicalHistory, {
+    data,
+    sessionId: 12,
+    consultationId: 7,
+  }));
+  const admissionOnly = { fechaNacimiento: "1980-01-02", generoBiologico: "FEMENINO", estudios: [] };
+  assert.equal(markup(admissionOnly), "");
+  assert.equal(markup({}), "");
+  assert.match(markup({ ...admissionOnly, peso: 70 }), /70 kg/);
+  assert.match(markup({ estudios: [{ id: 5, nombreArchivo: "Estudio de prueba.pdf", extensionArchivo: "pdf" }] }), /Estudio de prueba.pdf/);
+});
+
 test("la ruta administrativa consulta sesiones del sector y finaliza conservando errores 409", async () => {
   const calls = [];
   let backendResult = [];
@@ -297,6 +464,101 @@ test("la ruta administrativa consulta sesiones del sector y finaliza conservando
     ["/api/admin/hospitales/12/configuracion/sectores/7/sesiones", "GET"],
     ["/api/admin/hospitales/12/configuracion/sectores/7/sesiones/23/cerrar", "POST"],
     ["/api/admin/hospitales/12/configuracion/sectores/7/sesiones/23/cerrar", "POST"],
+  ]);
+});
+
+test("administración lista y anula discrepancias dentro del hospital, sin enviar un motivo", async () => {
+  const { paths } = JSON.parse(fs.readFileSync("contracts/pretriage-openapi.json", "utf8"));
+  const doctorReport = paths["/api/medico/sesiones/{sesionId}/consultas/{consultaId}/discrepancia-sintomas"].put;
+  const adminAnnul = paths["/api/admin/hospitales/{hospitalId}/discrepancias/{discrepanciaId}/anular"].post;
+  assert.equal(doctorReport.requestBody, undefined);
+  assert.equal(adminAnnul.requestBody, undefined);
+  assert.ok(adminAnnul.responses["204"]);
+
+  const calls = [];
+  const record = {
+    id: 9,
+    pacienteNombre: "Paciente de prueba",
+    pacienteDni: "12345678",
+    medicoNombre: "Profesional de prueba",
+    registradaEn: "2026-11-09T12:00:00Z",
+    estado: "VIGENTE",
+    sancion: { vigente: true, permanente: true, fechaFin: null },
+  };
+  let alreadyAnnulled = false;
+  const route = loadTypeScript("app/api/staff/admin/route.ts", {
+    require: (specifier) => ({
+      "next/server": { NextResponse },
+      "zod": { z },
+      "@/lib/api/route": {
+        apiErrorResponse: (error) => Response.json({ message: error.message }, { status: error.status }),
+      },
+      "@/lib/api/server": {
+        backendRequest: async (url, init = {}) => {
+          calls.push([url, init.method ?? "GET", init.body]);
+          if (!init.method) return [record];
+          if (alreadyAnnulled) throw Object.assign(new Error("La discrepancia ya está anulada."), { status: 409 });
+          alreadyAnnulled = true;
+          return null;
+        },
+      },
+    })[specifier],
+  });
+  const post = (operation, payload = {}) => route.POST(new Request("http://localhost/api/staff/admin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ operation, hospitalId: 12, ...payload }),
+  }));
+  const listed = await post("discrepancies");
+  assert.deepEqual(await listed.json(), [record]);
+  assert.match(listed.headers.get("Cache-Control"), /private, no-store/);
+  assert.equal((await post("annulDiscrepancy", { discrepancyId: "9" })).status, 400);
+  assert.equal((await post("annulDiscrepancy", { discrepancyId: 9 })).status, 204);
+  assert.equal((await post("annulDiscrepancy", { discrepancyId: 9 })).status, 409);
+  assert.deepEqual(calls, [
+    ["/api/admin/hospitales/12/discrepancias", "GET", undefined],
+    ["/api/admin/hospitales/12/discrepancias/9/anular", "POST", undefined],
+    ["/api/admin/hospitales/12/discrepancias/9/anular", "POST", undefined],
+  ]);
+});
+
+test("Personal suspende y reactiva solo el rol elegido de la membresía", async () => {
+  const calls = [];
+  let conflict = false;
+  const route = loadTypeScript("app/api/staff/admin/route.ts", {
+    require: (specifier) => ({
+      "next/server": { NextResponse },
+      "zod": { z },
+      "@/lib/api/route": {
+        apiErrorResponse: (error) => Response.json({ message: error.message }, { status: error.status }),
+      },
+      "@/lib/api/server": {
+        backendRequest: async (url, init) => {
+          const { estado } = JSON.parse(init.body);
+          calls.push([url, init.method, estado]);
+          if (conflict) throw Object.assign(new Error("La persona tiene una sesión abierta."), { status: 409 });
+          return { membresiaId: 9, estado };
+        },
+      },
+    })[specifier],
+  });
+  const update = (estado, role = "MEDICO") => route.POST(new Request("http://localhost/api/staff/admin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ operation: "setMembershipRoleState", hospitalId: 12, membershipId: 9, role, estado }),
+  }));
+  assert.equal((await update("ACTIVA", "NO_ROLE")).status, 400);
+  assert.equal((await update("REVOCADA")).status, 400);
+  assert.deepEqual(await (await update("SUSPENDIDA")).json(), { membresiaId: 9, estado: "SUSPENDIDA" });
+  assert.deepEqual(await (await update("ACTIVA", "RECEPCIONISTA")).json(), { membresiaId: 9, estado: "ACTIVA" });
+  conflict = true;
+  const rejected = await update("SUSPENDIDA");
+  assert.equal(rejected.status, 409);
+  assert.equal((await rejected.json()).message, "La persona tiene una sesión abierta.");
+  assert.deepEqual(calls, [
+    ["/api/admin/hospitales/12/membresias/9/roles/MEDICO", "PATCH", "SUSPENDIDA"],
+    ["/api/admin/hospitales/12/membresias/9/roles/RECEPCIONISTA", "PATCH", "ACTIVA"],
+    ["/api/admin/hospitales/12/membresias/9/roles/MEDICO", "PATCH", "SUSPENDIDA"],
   ]);
 });
 

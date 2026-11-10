@@ -1,0 +1,57 @@
+.invitationHistory {
+  padding: 0;
+  overflow: hidden;
+}
+
+.invitationHistorySummary {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.invitationHistorySummary::-webkit-details-marker {
+  display: none;
+}
+
+.invitationHistorySummary > span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.invitationHistorySummary strong {
+  font-size: 1.05rem;
+}
+
+.invitationHistoryCount {
+  color: var(--muted);
+  font-size: .8rem;
+}
+
+.invitationHistoryToggle {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform .15s ease;
+}
+
+.invitationHistory[open] .invitationHistoryToggle {
+  transform: rotate(225deg) translate(-2px, -1px);
+}
+
+.invitationHistorySummary:focus-visible {
+  outline: 3px solid rgba(23, 105, 224, .28);
+  outline-offset: -3px;
+}
+
+.invitationHistory > :not(summary) {
+  margin: 0 22px 20px;
+}

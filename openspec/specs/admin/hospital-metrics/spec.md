@@ -12,7 +12,7 @@ Un administrador con rol `ADMIN_HOSPITAL` DEBE (MUST) poder acceder a las métri
 
 #### Scenario: Admin accede a las métricas de su hospital
 - **WHEN** un usuario con membresía `ADMIN_HOSPITAL` sobre el hospital H abre `/admin/hospital/metricas`
-- **THEN** se muestra el formulario de consulta de períodos y el estado inicial vacío de la vista, dentro del shell de administración del hospital H
+- **THEN** se muestra el formulario de consulta de períodos y el estado inicial vacío. El panel lateral común marca **Métricas** como vista activa. Todos los resultados se muestran en esa vista.
 
 #### Scenario: Consulta sin hospital indicado
 - **WHEN** el admin abre `/admin/hospital/metricas` sin `hospitalId` en la URL
@@ -32,7 +32,14 @@ Un administrador con rol `ADMIN_HOSPITAL` DEBE (MUST) poder acceder a las métri
 
 ### Requirement: Consulta de métricas por período con calendario
 
-El sistema DEBE (MUST) presentar un formulario de calendario nativo con dos fechas obligatorias: `desde` y `hasta`. El `desde` DEBE ser estrictamente anterior a hoy, el `hasta` DEBE ser hoy o anterior, y el `hasta` DEBE ser mayor o igual que el `desde`. Cuando los campos del formulario o los parámetros de la URL violen esas reglas o presenten valores malformados, el sistema DEBE (MUST) mostrar los errores en rojo debajo del campo correspondiente y no DEBE consultar. El backend es la autoridad final: si una consulta inválida lo alcanza de todos modos, el sistema DEBE mostrar su 400 con mensaje descriptivo como aviso y no inventar métricas. Mientras una consulta está en curso, el formulario completo (botón y envío por Enter incluidos) DEBE quedar bloqueado para nuevos envíos. El botón `Consultar` DEBE (MUST) usar el estilo de acción primaria del sistema, con fondo azul y texto claro, consistente con los demás botones primarios de la aplicación.
+El formulario DEBE ofrecer **Este mes**, **Mes anterior** y **Personalizado**.
+**Este mes** consulta desde el primer día del mes hasta hoy. **Mes anterior**
+consulta el mes calendario completo. **Personalizado** permite elegir
+`desde` y `hasta`. Los rangos usan el calendario de Buenos Aires y cumplen
+`desde <= hasta <= hoy`. Dos fechas iguales consultan un solo día.
+Los errores aparecen debajo del campo correspondiente antes de consultar.
+El backend valida el rango final. Mientras carga la consulta, el formulario
+bloquea nuevos envíos. **Consultar** usa el estilo de acción primaria del sistema.
 
 #### Scenario: Consulta de un rango válido
 - **WHEN** el admin selecciona `desde` y `hasta` que cumplen las reglas y consulta
@@ -42,8 +49,8 @@ El sistema DEBE (MUST) presentar un formulario de calendario nativo con dos fech
 - **WHEN** el admin visualiza el formulario de consulta
 - **THEN** el botón Consultar se presenta como la acción primaria del sistema, con fondo azul y texto claro, consistente con el resto de la aplicación
 
-#### Scenario: Fecha inicial en el futuro o el día de hoy
-- **WHEN** el admin selecciona `desde` igual a hoy o posterior
+#### Scenario: Fecha inicial en el futuro
+- **WHEN** el admin selecciona `desde` posterior a hoy
 - **THEN** el sistema impide la consulta e indica la regla en el campo correspondiente
 
 #### Scenario: Fecha final en el futuro
@@ -63,7 +70,7 @@ El sistema DEBE (MUST) presentar un formulario de calendario nativo con dos fech
 - **THEN** los errores se muestran en rojo debajo del campo correspondiente y no se consulta
 
 #### Scenario: Backend rechaza la consulta
-- **WHEN** la consulta cumplió las reglas del formulario pero el backend la rechaza (por ejemplo, por límite propio de extensión del rango)
+- **WHEN** la consulta cumplió las reglas del formulario pero el backend la rechaza
 - **THEN** el sistema muestra el mensaje de error del backend como aviso, no inventa métricas y permite corregir el rango y reintentar
 
 #### Scenario: Consulta reiterada durante pendiente
