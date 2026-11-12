@@ -81,9 +81,12 @@ function PretriageSummary({ data, children, secondaryAction, generoBiologico }: 
         </div>
         <div className={styles.summaryCorner}>
           {data.cierreParcial ? (
-            <span className="status-chip">Entrevista parcial</span>
+            <div className="priority-review-heading">
+              <span className="status-chip">Entrevista parcial</span>
+              <span className="priority-badge">{priorityLabel(data.prioridadPreliminar)}</span>
+            </div>
           ) : (
-            <span className="priority-badge">{priorityLabel(data.prioridadPreliminar)}</span>
+              <span className="priority-badge">{priorityLabel(data.prioridadPreliminar)}</span>
           )}
           {secondaryAction}
         </div>
@@ -627,7 +630,7 @@ export function DoctorWorkspace({
           <p>Código {current.codigoLlamado ?? "no disponible"} · Sala {current.nombreSala ?? session.salaId} · {stateLabel(current.estadoConsulta)}</p>
         </header>
         <section className="panel call-panel">
-          <div className="call-visual"><span>Estado</span><strong>{stateLabel(current.estadoConsulta)}</strong><small>Código {current.codigoLlamado}</small></div>
+          <div className="call-visual"><span>Estado</span><strong>{stateLabel(current.estadoConsulta)}</strong><small>Código: {current.codigoLlamado ?? 'No disponible' }</small></div>
           {pretriageAvailable && pretriage.isPending ? (
             <div className="loading-card" role="status">Cargando resumen de pretriage…</div>
           ) : pretriageAvailable && pretriageData ? (

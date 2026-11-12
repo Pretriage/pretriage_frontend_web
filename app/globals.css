@@ -1622,7 +1622,7 @@ span.required-mark {
   border-radius: 999px;
   background: var(--blue-soft);
   color: var(--blue);
-  font-size: .72rem;
+  font-size: .75rem;
   font-weight: 720;
 }
 
